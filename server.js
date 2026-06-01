@@ -13,7 +13,7 @@ const rooms = {};
 
 const ADMIN_NAME = "AAO (Albert Anyange Olang)";
 
-// ---------------- MAZE ----------------
+// ---------------- MAZE GENERATION ----------------
 function generateMaze(size) {
     const maze = Array.from({ length: size }, () =>
         Array(size).fill(1)
@@ -65,54 +65,46 @@ function getRoom(id) {
         const items = [];
 
         for (let i = 0; i < 10; i++) {
-            items.push({ id: i, type: "fragment", ...openTile(maze) });
-            items.push({ id: i + 10, type: "key", ...openTile(maze) });
+            items.push({ id: "f" + i, type: "fragment", ...openTile(maze) });
+            items.push({ id: "k" + i, type: "key", ...openTile(maze) });
         }
 
         rooms[id] = {
             maze,
+            items,
             players: {},
-            items
+            startTime: Date.now(),
+            leaderboard: []
         };
     }
+
     return rooms[id];
 }
 
 // ---------------- SOCKET ----------------
-io.on("connection", (socket) => {
+io.on("connection", socket => {
 
-    // JOIN
     socket.on("join", ({ name, room }) => {
 
         const r = getRoom(room);
-
         socket.room = room;
         socket.join(room);
 
-        // ---------------- ADMIN ----------------
+        // ADMIN MODE
         if (name === ADMIN_NAME) {
-
-            socket.isAdmin = true;
-
-            socket.emit("admin", {
-                maze: r.maze,
-                items: r.items,
-                players: r.players
-            });
-
+            socket.emit("admin", r);
             return;
         }
 
-        // ---------------- PLAYER ----------------
-        socket.player = {
+        // PLAYER INIT
+        r.players[socket.id] = {
             name,
             x: 1,
             y: 1,
             fragments: [],
-            keys: []
+            keys: [],
+            finished: false
         };
-
-        r.players[socket.id] = socket.player;
 
         socket.emit("init", {
             maze: r.maze,
@@ -123,8 +115,8 @@ io.on("connection", (socket) => {
         io.to(room).emit("players", r.players);
     });
 
-    // MOVE
-    socket.on("move", (pos) => {
+    // ---------------- MOVE ----------------
+    socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
 
@@ -137,19 +129,15 @@ io.on("connection", (socket) => {
         io.to(socket.room).emit("players", r.players);
     });
 
-    // COLLECT (GLOBAL REMOVE FIXED)
-    socket.on("collect", (itemId) => {
-
+    // ---------------- COLLECT ----------------
+    socket.on("collect", itemId => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
-        if (!p) return;
+        const item = r.items.find(i => i.id === itemId);
 
-        const index = r.items.findIndex(i => i.id === itemId);
-        if (index === -1) return;
-
-        const item = r.items[index];
+        if (!p || !item) return;
 
         if (item.type === "fragment") {
             if (!p.fragments.includes(itemId)) {
@@ -160,14 +148,50 @@ io.on("connection", (socket) => {
                 p.keys.push(itemId);
             }
         }
-
-        // REMOVE FOR EVERYONE
-        r.items.splice(index, 1);
-
-        io.to(socket.room).emit("itemsUpdate", r.items);
-        socket.emit("playerUpdate", p);
     });
 
+    // ---------------- WIN SYSTEM ----------------
+    socket.on("win", () => {
+        const r = rooms[socket.room];
+        if (!r) return;
+
+        const p = r.players[socket.id];
+        if (!p || p.finished) return;
+
+        p.finished = true;
+
+        const time = Date.now() - r.startTime;
+
+        r.leaderboard.push({
+            name: p.name,
+            time
+        });
+
+        r.leaderboard.sort((a, b) => a.time - b.time);
+
+        io.to(socket.room).emit("leaderboard", r.leaderboard);
+    });
+
+    // ---------------- CHAT ----------------
+    socket.on("chat", msg => {
+        const r = rooms[socket.room];
+        if (!r) return;
+
+        io.to(socket.room).emit("chat", {
+            name: r.players[socket.id]?.name || "Player",
+            msg
+        });
+    });
+
+    // ---------------- DISCONNECT ----------------
+    socket.on("disconnect", () => {
+        const r = rooms[socket.room];
+        if (!r) return;
+
+        delete r.players[socket.id];
+
+        io.to(socket.room).emit("players", r.players);
+    });
 });
 
 server.listen(process.env.PORT || 3000);

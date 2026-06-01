@@ -5,14 +5,7 @@ let items = [];
 let players = {};
 let id;
 
-let isAdmin = false;
-
-let player = {
-    x: 1,
-    y: 1,
-    fragments: [],
-    keys: []
-};
+let player = { x:1,y:1,fragments:[],keys:[] };
 
 const c = document.getElementById("game");
 const ctx = c.getContext("2d");
@@ -22,62 +15,60 @@ c.height = window.innerHeight;
 
 const tile = 20;
 
+let startTime = Date.now();
+
 // ---------------- JOIN ----------------
 function join() {
-    const name = document.getElementById("name").value.trim();
-    const room = document.getElementById("room").value.trim();
-
-    if (!name || !room) return alert("Enter name + room");
+    const name = document.getElementById("name").value;
+    const room = document.getElementById("room").value;
 
     socket.emit("join", { name, room });
 }
 
-// ---------------- INIT ----------------
+// ---------------- SOCKET ----------------
 socket.on("init", data => {
     maze = data.maze;
     items = data.items;
     id = data.id;
+    startTime = Date.now();
 });
 
-// ---------------- ADMIN ----------------
-socket.on("admin", data => {
-    isAdmin = true;
+socket.on("players", data => players = data);
 
-    maze = data.maze;
-    items = data.items;
-    players = data.players;
+// ---------------- CHAT ----------------
+socket.on("chat", msg => {
+    const box = document.getElementById("chatBox");
+    box.innerHTML += `<div>${msg}</div>`;
+    box.scrollTop = box.scrollHeight;
 });
 
-// ---------------- PLAYERS ----------------
-socket.on("players", data => {
-    players = data;
+document.getElementById("chatInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+        socket.emit("chat", document.getElementById("chatInput").value);
+        document.getElementById("chatInput").value = "";
+    }
 });
 
-// ---------------- ITEM UPDATE ----------------
-socket.on("itemsUpdate", newItems => {
-    items = newItems;
+// ---------------- LEADERBOARD ----------------
+socket.on("leaderboard", data => {
+    const board = document.getElementById("board");
+    board.innerHTML = "";
+
+    data.forEach(p => {
+        board.innerHTML += `<div>${p.name} - ${Math.floor(p.time/1000)}s</div>`;
+    });
 });
 
-// ---------------- PLAYER UPDATE ----------------
-socket.on("playerUpdate", p => {
-    player = p;
-
-    document.getElementById("f").innerText = p.fragments.length;
-    document.getElementById("k").innerText = p.keys.length;
-});
-
-// ---------------- MOVEMENT ----------------
+// ---------------- MOVE ----------------
 document.addEventListener("keydown", e => {
-
-    if (isAdmin) return;
 
     let nx = player.x;
     let ny = player.y;
 
-    if (e.key === "w" || e.key === "ArrowUp") ny--;
-    if (e.key === "s" || e.key === "ArrowDown") ny++;
-    if (e.key === "a" || e.key === "ArrowLeft") nx--;
-    if (e.key === "d" || e.key === "ArrowRight") nx++;
+    if (e.key === "w") ny--;
+    if (e.key === "s") ny++;
+    if (e.key === "a") nx--;
+    if (e.key === "d") nx++;
 
     if (maze[ny]?.[nx] === 0) {
         player.x = nx;
@@ -86,72 +77,68 @@ document.addEventListener("keydown", e => {
         socket.emit("move", player);
 
         checkItems();
+        checkExit();
     }
 });
 
-// ---------------- COLLECT ----------------
+// ---------------- ITEMS ----------------
 function checkItems() {
     items.forEach(i => {
         if (player.x === i.x && player.y === i.y) {
             socket.emit("collect", i.id);
+            items = items.filter(x => x.id !== i.id);
         }
     });
 }
 
-// ---------------- FOG ----------------
-function visible(x, y) {
-    if (isAdmin) return true;
+// ---------------- EXIT ----------------
+function checkExit() {
+    if (player.fragments.length === 10 && player.keys.length === 10) {
+        socket.emit("win");
 
-    return Math.abs(player.x - x) <= 4 &&
-           Math.abs(player.y - y) <= 4;
+        document.getElementById("winScreen").style.display = "block";
+    }
+}
+
+// ---------------- TIMER ----------------
+setInterval(() => {
+    document.getElementById("time").innerText =
+        Math.floor((Date.now() - startTime)/1000);
+}, 1000);
+
+// ---------------- FOG ----------------
+function visible(x,y){
+    return Math.abs(player.x-x)<=4 && Math.abs(player.y-y)<=4;
 }
 
 // ---------------- RENDER ----------------
-function draw() {
+function draw(){
 
-    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.clearRect(0,0,c.width,c.height);
 
-    let camX, camY;
+    let camX = player.x*tile - c.width/2;
+    let camY = player.y*tile - c.height/2;
 
-    if (isAdmin) {
-        camX = (maze.length * tile) / 2 - c.width / 2;
-        camY = (maze.length * tile) / 2 - c.height / 2;
-    } else {
-        camX = player.x * tile - c.width / 2;
-        camY = player.y * tile - c.height / 2;
-    }
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.translate(-camX,-camY);
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.translate(-camX, -camY);
-
-    // MAZE
-    for (let y = 0; y < maze.length; y++) {
-        for (let x = 0; x < maze[y].length; x++) {
-
-            if (!visible(x, y)) continue;
-
-            if (maze[y][x] === 1) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(x * tile, y * tile, tile, tile);
-            }
+    for(let y=0;y<maze.length;y++){
+        for(let x=0;x<maze[y].length;x++){
+            if(!visible(x,y)) continue;
+            if(maze[y][x]) ctx.fillRect(x*tile,y*tile,tile,tile);
         }
     }
 
-    // ITEMS
-    items.forEach(i => {
-
-        if (!visible(i.x, i.y)) return;
-
-        ctx.fillStyle = i.type === "fragment" ? "cyan" : "orange";
-        ctx.fillRect(i.x * tile, i.y * tile, tile, tile);
+    items.forEach(i=>{
+        if(!visible(i.x,i.y)) return;
+        ctx.fillStyle = i.type==="fragment"?"cyan":"orange";
+        ctx.fillRect(i.x*tile,i.y*tile,tile,tile);
     });
 
-    // PLAYERS
-    for (let pid in players) {
-        const p = players[pid];
-
-        ctx.fillStyle = pid === id ? "red" : "blue";
-        ctx.fillRect(p.x * tile, p.y * tile, tile, tile);
+    for(let p in players){
+        let pl = players[p];
+        ctx.fillStyle = "red";
+        ctx.fillRect(pl.x*tile,pl.y*tile,tile,tile);
     }
 
     requestAnimationFrame(draw);

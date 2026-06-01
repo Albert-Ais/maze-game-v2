@@ -7,18 +7,38 @@
 </head>
 <body>
 
+<!-- MENU -->
 <div id="menu">
     <input id="name" placeholder="Name">
     <input id="room" placeholder="Room">
     <button onclick="join()">Play</button>
 </div>
 
+<!-- HUD -->
 <div id="ui">
     Fragments: <span id="f">0</span>/10<br>
-    Keys: <span id="k">0</span>/10
+    Keys: <span id="k">0</span>/10<br>
+    Time: <span id="time">0</span>s
 </div>
 
-<canvas id="c"></canvas>
+<!-- CHAT -->
+<div id="chat">
+    <div id="chatBox"></div>
+    <input id="chatInput" placeholder="Type message...">
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard">
+    <h3>Leaderboard</h3>
+    <div id="board"></div>
+</div>
+
+<!-- EXIT MESSAGE -->
+<div id="winScreen" style="display:none;">
+    <h1>EXIT FOUND!</h1>
+</div>
+
+<canvas id="game"></canvas>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
