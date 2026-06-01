@@ -60,7 +60,7 @@ socket.on("playerUpdate", p => {
 });
 
 /* =========================
-   CHAT (optional UI)
+   CHAT
 ========================= */
 socket.on("chat", d => {
     const box = document.getElementById("chatBox");
@@ -71,7 +71,7 @@ socket.on("chat", d => {
 });
 
 /* =========================
-   LEADERBOARD (optional UI)
+   LEADERBOARD
 ========================= */
 socket.on("leaderboard", data => {
     const b = document.getElementById("board");
@@ -84,7 +84,7 @@ socket.on("leaderboard", data => {
 });
 
 /* =========================
-   MOVEMENT (SAFE)
+   MOVEMENT
 ========================= */
 document.addEventListener("keydown", e => {
     let nx = player.x;
@@ -95,7 +95,6 @@ document.addEventListener("keydown", e => {
     if (e.key === "a") nx--;
     if (e.key === "d") nx++;
 
-    // collision check
     if (maze?.[ny]?.[nx] === 0) {
         player.x = nx;
         player.y = ny;
@@ -123,7 +122,16 @@ function checkItems() {
 }
 
 /* =========================
-   RENDER LOOP (FULL MAP)
+   VISION (SMALL CIRCLE)
+========================= */
+function visible(x, y) {
+    const dx = player.x - x;
+    const dy = player.y - y;
+    return Math.sqrt(dx * dx + dy * dy) <= 2.2;
+}
+
+/* =========================
+   DRAW LOOP
 ========================= */
 function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -138,12 +146,12 @@ function draw() {
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
 
-            // floor
+            // floor always visible
             ctx.fillStyle = "#111";
             ctx.fillRect(x * tile, y * tile, tile, tile);
 
-            // walls
-            if (maze[y][x] === 1) {
+            // walls only in vision
+            if (maze[y][x] === 1 && visible(x, y)) {
                 ctx.fillStyle = "#fff";
                 ctx.fillRect(x * tile, y * tile, tile, tile);
             }
@@ -154,6 +162,8 @@ function draw() {
     for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it) continue;
+
+        if (!visible(it.x, it.y)) continue;
 
         ctx.fillStyle = it.color || "cyan";
 
@@ -172,6 +182,8 @@ function draw() {
     for (let p in players) {
         const pl = players[p];
         if (!pl) continue;
+
+        if (!visible(pl.x, pl.y)) continue;
 
         ctx.fillStyle = "red";
 
