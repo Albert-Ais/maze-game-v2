@@ -109,16 +109,7 @@ function checkItems() {
     });
 }
 
-// ---------------- VISION ----------------
-function visible(x, y) {
-    const dx = player.x - x;
-    const dy = player.y - y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    return dist <= 3.8;
-}
-
-// ---------------- DRAW ----------------
+// ---------------- DRAW FULL MAP ----------------
 function draw() {
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -128,18 +119,16 @@ function draw() {
         return;
     }
 
-    // ---------------- MAZE ----------------
+    // ---------------- MAZE (FULLY VISIBLE) ----------------
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
 
             ctx.fillStyle = "#111";
             ctx.fillRect(x * tile, y * tile, tile, tile);
 
-            if (visible(x, y)) {
-                if (maze[y][x] === 1) {
-                    ctx.fillStyle = "#fff";
-                    ctx.fillRect(x * tile, y * tile, tile, tile);
-                }
+            if (maze[y][x] === 1) {
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(x * tile, y * tile, tile, tile);
             }
         }
     }
@@ -147,7 +136,6 @@ function draw() {
     // ---------------- ITEMS ----------------
     items.forEach(i => {
         if (!i) return;
-        if (!visible(i.x, i.y)) return;
 
         ctx.fillStyle = i.color || "cyan";
 
@@ -165,7 +153,6 @@ function draw() {
     // ---------------- PLAYERS ----------------
     for (let p in players) {
         if (!players[p]) continue;
-        if (!visible(players[p].x, players[p].y)) continue;
 
         ctx.fillStyle = "red";
 
