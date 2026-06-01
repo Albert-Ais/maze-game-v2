@@ -13,6 +13,11 @@ const rooms = {};
 
 const ADMIN_NAME = "AAO (Albert Anyange Olang)";
 
+const COLORS = [
+    "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
+    "#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
+];
+
 // ---------------- MAZE ----------------
 function generateMaze(size) {
     const maze = Array.from({ length: size }, () =>
@@ -22,10 +27,7 @@ function generateMaze(size) {
     function carve(x, y) {
         maze[y][x] = 0;
 
-        const dirs = [
-            [2, 0], [-2, 0],
-            [0, 2], [0, -2]
-        ].sort(() => Math.random() - 0.5);
+        const dirs = [[2,0],[-2,0],[0,2],[0,-2]].sort(() => Math.random() - 0.5);
 
         for (const [dx, dy] of dirs) {
             const nx = x + dx;
@@ -36,7 +38,7 @@ function generateMaze(size) {
                 nx < size - 1 && ny < size - 1 &&
                 maze[ny][nx] === 1
             ) {
-                maze[y + dy / 2][x + dx / 2] = 0;
+                maze[y + dy/2][x + dx/2] = 0;
                 carve(nx, ny);
             }
         }
@@ -44,17 +46,6 @@ function generateMaze(size) {
 
     carve(1, 1);
     return maze;
-}
-
-// ---------------- SAFE TILE ----------------
-function openTile(maze) {
-    let x, y;
-    do {
-        x = Math.floor(Math.random() * SIZE);
-        y = Math.floor(Math.random() * SIZE);
-    } while (maze[y][x] === 1);
-
-    return { x, y };
 }
 
 // ---------------- ROOM ----------------
@@ -65,54 +56,60 @@ function getRoom(id) {
         const items = [];
 
         for (let i = 0; i < 10; i++) {
-            items.push({ id: i, type: "fragment", ...openTile(maze) });
-            items.push({ id: i + 10, type: "key", ...openTile(maze) });
+            items.push({
+                id: "f"+i,
+                type: "fragment",
+                color: COLORS[i],
+                x: 2+i,
+                y: 2
+            });
+
+            items.push({
+                id: "k"+i,
+                type: "key",
+                color: COLORS[i],
+                x: 2+i,
+                y: 5
+            });
         }
 
         rooms[id] = {
             maze,
             players: {},
-            items
+            items,
+            startTime: Date.now(),
+            leaderboard: [],
+            exitOpen: false
         };
     }
+
     return rooms[id];
 }
 
 // ---------------- SOCKET ----------------
-io.on("connection", (socket) => {
+io.on("connection", socket => {
 
-    // JOIN
     socket.on("join", ({ name, room }) => {
 
         const r = getRoom(room);
-
         socket.room = room;
         socket.join(room);
 
-        // ---------------- ADMIN ----------------
-        if (name === ADMIN_NAME) {
-
+        if (name.trim().toLowerCase() === ADMIN_NAME.toLowerCase()) {
             socket.isAdmin = true;
-
-            socket.emit("admin", {
-                maze: r.maze,
-                items: r.items,
-                players: r.players
-            });
-
+            socket.emit("admin", r);
             return;
         }
 
-        // ---------------- PLAYER ----------------
-        socket.player = {
+        r.players[socket.id] = {
             name,
             x: 1,
             y: 1,
+            vx: 1,
+            vy: 1,
             fragments: [],
             keys: []
         };
-
-        r.players[socket.id] = socket.player;
 
         socket.emit("init", {
             maze: r.maze,
@@ -124,7 +121,7 @@ io.on("connection", (socket) => {
     });
 
     // MOVE
-    socket.on("move", (pos) => {
+    socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
 
@@ -137,35 +134,57 @@ io.on("connection", (socket) => {
         io.to(socket.room).emit("players", r.players);
     });
 
-    // COLLECT (GLOBAL REMOVE FIXED)
-    socket.on("collect", (itemId) => {
+    // COLLECT
+    socket.on("collect", id => {
+        const r = rooms[socket.room];
+        if (!r) return;
 
+        const p = r.players[socket.id];
+        const index = r.items.findIndex(i => i.id === id);
+
+        if (!p || index === -1) return;
+
+        const item = r.items[index];
+
+        if (item.type === "fragment") p.fragments.push(id);
+        else p.keys.push(id);
+
+        r.items.splice(index, 1);
+
+        // OPEN EXIT WHEN ALL COLLECTED
+        if (r.items.length === 0) {
+            r.exitOpen = true;
+            io.to(socket.room).emit("exitOpen");
+        }
+
+        io.to(socket.room).emit("itemsUpdate", r.items);
+    });
+
+    // WIN
+    socket.on("win", () => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
         if (!p) return;
 
-        const index = r.items.findIndex(i => i.id === itemId);
-        if (index === -1) return;
+        const time = Date.now() - r.startTime;
 
-        const item = r.items[index];
+        r.leaderboard.push({ name: p.name, time });
+        r.leaderboard.sort((a,b)=>a.time-b.time);
 
-        if (item.type === "fragment") {
-            if (!p.fragments.includes(itemId)) {
-                p.fragments.push(itemId);
-            }
-        } else {
-            if (!p.keys.includes(itemId)) {
-                p.keys.push(itemId);
-            }
-        }
+        io.to(socket.room).emit("leaderboard", r.leaderboard);
+    });
 
-        // REMOVE FOR EVERYONE
-        r.items.splice(index, 1);
+    // CHAT
+    socket.on("chat", msg => {
+        const r = rooms[socket.room];
+        if (!r) return;
 
-        io.to(socket.room).emit("itemsUpdate", r.items);
-        socket.emit("playerUpdate", p);
+        io.to(socket.room).emit("chat", {
+            name: r.players[socket.id]?.name,
+            msg
+        });
     });
 
 });

@@ -1,158 +1,146 @@
 const socket = io();
 
-let maze = [];
-let items = [];
-let players = {};
-let id;
+let maze=[],items=[],players={},id;
+let isAdmin=false;
+let exitOpen=false;
 
-let isAdmin = false;
-
-let player = {
-    x: 1,
-    y: 1,
-    fragments: [],
-    keys: []
+let player={
+    x:1,y:1,vx:1,vy:1,fragments:[],keys:[]
 };
 
-const c = document.getElementById("game");
-const ctx = c.getContext("2d");
+const c=document.getElementById("game");
+const ctx=c.getContext("2d");
+c.width=innerWidth;
+c.height=innerHeight;
 
-c.width = window.innerWidth;
-c.height = window.innerHeight;
-
-const tile = 20;
+const tile=20;
 
 // ---------------- JOIN ----------------
-function join() {
-    const name = document.getElementById("name").value.trim();
-    const room = document.getElementById("room").value.trim();
-
-    if (!name || !room) return alert("Enter name + room");
-
-    socket.emit("join", { name, room });
+function join(){
+    socket.emit("join",{
+        name:document.getElementById("name").value,
+        room:document.getElementById("room").value
+    });
 }
 
-// ---------------- INIT ----------------
-socket.on("init", data => {
-    maze = data.maze;
-    items = data.items;
-    id = data.id;
+// ---------------- SOCKET ----------------
+socket.on("init",d=>{
+    maze=d.maze;
+    items=d.items;
+    id=d.id;
 });
 
-// ---------------- ADMIN ----------------
-socket.on("admin", data => {
-    isAdmin = true;
-
-    maze = data.maze;
-    items = data.items;
-    players = data.players;
+socket.on("admin",d=>{
+    isAdmin=true;
+    maze=d.maze;
+    items=d.items;
+    players=d.players;
 });
 
-// ---------------- PLAYERS ----------------
-socket.on("players", data => {
-    players = data;
-});
+socket.on("players",d=>players=d);
 
-// ---------------- ITEM UPDATE ----------------
-socket.on("itemsUpdate", newItems => {
-    items = newItems;
-});
+socket.on("itemsUpdate",d=>items=d);
 
-// ---------------- PLAYER UPDATE ----------------
-socket.on("playerUpdate", p => {
-    player = p;
+socket.on("exitOpen",()=>exitOpen=true);
 
-    document.getElementById("f").innerText = p.fragments.length;
-    document.getElementById("k").innerText = p.keys.length;
-});
+// ---------------- COLORS ----------------
+const colors=[
+"#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
+"#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
+];
 
-// ---------------- MOVEMENT ----------------
-document.addEventListener("keydown", e => {
+// ---------------- SMOOTH MOVEMENT ----------------
+let keys={};
 
-    if (isAdmin) return;
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
 
-    let nx = player.x;
-    let ny = player.y;
+function updateMovement(){
+    if(isAdmin) return;
 
-    if (e.key === "w" || e.key === "ArrowUp") ny--;
-    if (e.key === "s" || e.key === "ArrowDown") ny++;
-    if (e.key === "a" || e.key === "ArrowLeft") nx--;
-    if (e.key === "d" || e.key === "ArrowRight") nx++;
+    let dx=0,dy=0;
 
-    if (maze[ny]?.[nx] === 0) {
-        player.x = nx;
-        player.y = ny;
+    if(keys["w"]||keys["ArrowUp"]) dy=-0.2;
+    if(keys["s"]||keys["ArrowDown"]) dy=0.2;
+    if(keys["a"]||keys["ArrowLeft"]) dx=-0.2;
+    if(keys["d"]||keys["ArrowRight"]) dx=0.2;
 
-        socket.emit("move", player);
+    player.vx+=dx;
+    player.vy+=dy;
 
-        checkItems();
-    }
-});
+    player.vx*=0.8;
+    player.vy*=0.8;
+
+    player.x+=player.vx;
+    player.y+=player.vy;
+
+    socket.emit("move",player);
+}
 
 // ---------------- COLLECT ----------------
-function checkItems() {
-    items.forEach(i => {
-        if (player.x === i.x && player.y === i.y) {
-            socket.emit("collect", i.id);
+function checkItems(){
+    items.forEach(i=>{
+        if(Math.floor(player.x)==i.x && Math.floor(player.y)==i.y){
+            socket.emit("collect",i.id);
         }
     });
 }
 
-// ---------------- FOG ----------------
-function visible(x, y) {
-    if (isAdmin) return true;
+// ---------------- CAMERA ----------------
+function visible(){return true;}
 
-    return Math.abs(player.x - x) <= 4 &&
-           Math.abs(player.y - y) <= 4;
+// ---------------- EXIT DOOR ----------------
+function drawExit(){
+    if(!exitOpen) return;
+
+    ctx.fillStyle="gold";
+    ctx.fillRect(5*tile,5*tile,tile,tile);
 }
 
-// ---------------- RENDER ----------------
-function draw() {
+// ---------------- DRAW ----------------
+function draw(){
 
-    ctx.clearRect(0, 0, c.width, c.height);
+    updateMovement();
 
-    let camX, camY;
+    ctx.clearRect(0,0,c.width,c.height);
 
-    if (isAdmin) {
-        camX = (maze.length * tile) / 2 - c.width / 2;
-        camY = (maze.length * tile) / 2 - c.height / 2;
-    } else {
-        camX = player.x * tile - c.width / 2;
-        camY = player.y * tile - c.height / 2;
-    }
+    let camX=(player.x+0.5)*tile-c.width/2;
+    let camY=(player.y+0.5)*tile-c.height/2;
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.translate(-camX, -camY);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.translate(-camX,-camY);
 
     // MAZE
-    for (let y = 0; y < maze.length; y++) {
-        for (let x = 0; x < maze[y].length; x++) {
-
-            if (!visible(x, y)) continue;
-
-            if (maze[y][x] === 1) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(x * tile, y * tile, tile, tile);
+    for(let y=0;y<maze.length;y++){
+        for(let x=0;x<maze[y].length;x++){
+            if(maze[y][x]){
+                ctx.fillStyle="white";
+                ctx.fillRect(x*tile,y*tile,tile,tile);
             }
         }
     }
 
-    // ITEMS
-    items.forEach(i => {
+    // ITEMS (10 COLORS)
+    items.forEach(i=>{
+        const idx=parseInt(i.id.slice(1));
+        ctx.fillStyle=colors[idx];
 
-        if (!visible(i.x, i.y)) return;
-
-        ctx.fillStyle = i.type === "fragment" ? "cyan" : "orange";
-        ctx.fillRect(i.x * tile, i.y * tile, tile, tile);
+        ctx.fillRect(
+            i.x*tile+5,
+            i.y*tile+5,
+            tile-10,
+            tile-10
+        );
     });
 
     // PLAYERS
-    for (let pid in players) {
-        const p = players[pid];
-
-        ctx.fillStyle = pid === id ? "red" : "blue";
-        ctx.fillRect(p.x * tile, p.y * tile, tile, tile);
+    for(let p in players){
+        ctx.fillStyle="red";
+        ctx.fillRect(players[p].x*tile,players[p].y*tile,tile,tile);
     }
+
+    drawExit();
+    checkItems();
 
     requestAnimationFrame(draw);
 }
