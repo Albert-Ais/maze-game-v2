@@ -20,7 +20,9 @@ c.height = window.innerHeight;
 
 const tile = 20;
 
-// ---------------- JOIN ----------------
+/* =========================
+   JOIN
+========================= */
 function join() {
     socket.emit("join", {
         name: document.getElementById("name").value,
@@ -28,16 +30,22 @@ function join() {
     });
 }
 
-// ---------------- SOCKET ----------------
+/* =========================
+   SOCKET EVENTS
+========================= */
 socket.on("init", d => {
     maze = d.maze || [];
     items = d.items || [];
     id = d.id;
 });
 
-socket.on("players", d => players = d || {});
+socket.on("players", d => {
+    players = d || {};
+});
 
-socket.on("itemsUpdate", d => items = d || []);
+socket.on("itemsUpdate", d => {
+    items = d || [];
+});
 
 socket.on("playerUpdate", p => {
     if (!p) return;
@@ -51,7 +59,9 @@ socket.on("playerUpdate", p => {
     if (k) k.innerText = p.keys.length;
 });
 
-// ---------------- CHAT ----------------
+/* =========================
+   CHAT (optional UI)
+========================= */
 socket.on("chat", d => {
     const box = document.getElementById("chatBox");
     if (!box) return;
@@ -60,7 +70,9 @@ socket.on("chat", d => {
     box.scrollTop = box.scrollHeight;
 });
 
-// ---------------- LEADERBOARD ----------------
+/* =========================
+   LEADERBOARD (optional UI)
+========================= */
 socket.on("leaderboard", data => {
     const b = document.getElementById("board");
     if (!b) return;
@@ -71,7 +83,9 @@ socket.on("leaderboard", data => {
     });
 });
 
-// ---------------- MOVEMENT ----------------
+/* =========================
+   MOVEMENT (SAFE)
+========================= */
 document.addEventListener("keydown", e => {
     let nx = player.x;
     let ny = player.y;
@@ -81,51 +95,54 @@ document.addEventListener("keydown", e => {
     if (e.key === "a") nx--;
     if (e.key === "d") nx++;
 
+    // collision check
     if (maze?.[ny]?.[nx] === 0) {
         player.x = nx;
         player.y = ny;
 
         socket.emit("move", {
-            x: player.x,
-            y: player.y
+            x: nx,
+            y: ny
         });
 
         checkItems();
     }
 });
 
-// ---------------- ITEMS ----------------
+/* =========================
+   ITEM COLLECTION
+========================= */
 function checkItems() {
     items.forEach(i => {
         if (!i) return;
 
-        const dx = player.x - i.x;
-        const dy = player.y - i.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist <= 1) {
+        if (player.x === i.x && player.y === i.y) {
             socket.emit("collect", i.id);
         }
     });
 }
 
-// ---------------- DRAW FULL MAP ----------------
+/* =========================
+   RENDER LOOP (FULL MAP)
+========================= */
 function draw() {
-    ctx.clearRect(0, 0, c.width, c.height);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
 
     if (!maze.length) {
         requestAnimationFrame(draw);
         return;
     }
 
-    // ---------------- MAZE (FULLY VISIBLE) ----------------
+    /* ---------------- MAZE ---------------- */
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
 
+            // floor
             ctx.fillStyle = "#111";
             ctx.fillRect(x * tile, y * tile, tile, tile);
 
+            // walls
             if (maze[y][x] === 1) {
                 ctx.fillStyle = "#fff";
                 ctx.fillRect(x * tile, y * tile, tile, tile);
@@ -133,32 +150,34 @@ function draw() {
         }
     }
 
-    // ---------------- ITEMS ----------------
-    items.forEach(i => {
-        if (!i) return;
+    /* ---------------- ITEMS ---------------- */
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!it) continue;
 
-        ctx.fillStyle = i.color || "cyan";
+        ctx.fillStyle = it.color || "cyan";
 
         const size = tile * 0.6;
         const pad = (tile - size) / 2;
 
         ctx.fillRect(
-            i.x * tile + pad,
-            i.y * tile + pad,
+            it.x * tile + pad,
+            it.y * tile + pad,
             size,
             size
         );
-    });
+    }
 
-    // ---------------- PLAYERS ----------------
+    /* ---------------- PLAYERS ---------------- */
     for (let p in players) {
-        if (!players[p]) continue;
+        const pl = players[p];
+        if (!pl) continue;
 
         ctx.fillStyle = "red";
 
         ctx.fillRect(
-            players[p].x * tile + 2,
-            players[p].y * tile + 2,
+            pl.x * tile + 2,
+            pl.y * tile + 2,
             tile - 4,
             tile - 4
         );
