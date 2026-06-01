@@ -27,7 +27,8 @@ function generateMaze(size) {
     function carve(x, y) {
         maze[y][x] = 0;
 
-        const dirs = [[2,0],[-2,0],[0,2],[0,-2]].sort(() => Math.random() - 0.5);
+        const dirs = [[2,0],[-2,0],[0,2],[0,-2]]
+            .sort(() => Math.random() - 0.5);
 
         for (const [dx, dy] of dirs) {
             const nx = x + dx;
@@ -48,8 +49,8 @@ function generateMaze(size) {
     return maze;
 }
 
-// ---------------- SAFE SPAWN ----------------
-function getEmptyTile(maze) {
+// ---------------- SAFE TILE ----------------
+function openTile(maze) {
     let x, y;
     do {
         x = Math.floor(Math.random() * SIZE);
@@ -70,14 +71,14 @@ function getRoom(id) {
                 id: "f"+i,
                 type: "fragment",
                 color: COLORS[i],
-                ...getEmptyTile(maze)
+                ...openTile(maze)
             });
 
             items.push({
                 id: "k"+i,
                 type: "key",
                 color: COLORS[i],
-                ...getEmptyTile(maze)
+                ...openTile(maze)
             });
         }
 
@@ -125,7 +126,7 @@ io.on("connection", socket => {
         io.to(room).emit("players", r.players);
     });
 
-    // MOVE (server validation prevents wall teleport)
+    // MOVE (safe collision)
     socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
@@ -168,12 +169,12 @@ io.on("connection", socket => {
         if (!r) return;
 
         io.to(socket.room).emit("chat", {
-            name: r.players[socket.id]?.name,
+            name: r.players[socket.id]?.name || "Player",
             msg
         });
     });
 
-    // WIN / SPEEDRUN
+    // WIN
     socket.on("win", () => {
         const r = rooms[socket.room];
         if (!r) return;

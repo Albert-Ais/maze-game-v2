@@ -1,15 +1,21 @@
 const socket = io();
 
 let maze=[],items=[],players={},id;
-let player={x:1,y:1,fragments:[],keys:[]};
 
-const c=document.getElementById("game");
-const ctx=c.getContext("2d");
+let player = {
+    x:1,
+    y:1,
+    fragments:[],
+    keys:[]
+};
 
-c.width=innerWidth;
-c.height=innerHeight;
+const c = document.getElementById("game");
+const ctx = c.getContext("2d");
 
-const tile=20;
+c.width = window.innerWidth;
+c.height = window.innerHeight;
+
+const tile = 20;
 
 // ---------------- JOIN ----------------
 function join(){
@@ -32,6 +38,7 @@ socket.on("itemsUpdate",d=>items=d);
 
 socket.on("playerUpdate",p=>{
     player=p;
+
     document.getElementById("f").innerText=p.fragments.length;
     document.getElementById("k").innerText=p.keys.length;
 });
@@ -71,7 +78,7 @@ document.addEventListener("keydown",e=>{
     }
 });
 
-// ---------------- COLLECT ----------------
+// ---------------- ITEMS ----------------
 function checkItems(){
     items.forEach(i=>{
         if(player.x===i.x && player.y===i.y){
@@ -80,17 +87,10 @@ function checkItems(){
     });
 }
 
-// ---------------- SMALL VISION ----------------
+// ---------------- SMALL VISION ONLY ----------------
 function visible(x,y){
-    return Math.abs(player.x-x)<=3 && Math.abs(player.y-y)<=3;
-}
-
-// ---------------- CAMERA (FIXED - NO LEAD BUG) ----------------
-function cam(){
-    return {
-        x: player.x*tile - c.width/2,
-        y: player.y*tile - c.height/2
-    };
+    return Math.abs(player.x-x)<=3 &&
+           Math.abs(player.y-y)<=3;
 }
 
 // ---------------- DRAW ----------------
@@ -98,28 +98,32 @@ function draw(){
 
     ctx.clearRect(0,0,c.width,c.height);
 
-    const camX=cam().x;
-    const camY=cam().y;
-
     ctx.setTransform(1,0,0,1,0,0);
-    ctx.translate(-camX,-camY);
 
-    // MAZE
+    // ---------------- MAZE ----------------
     for(let y=0;y<maze.length;y++){
         for(let x=0;x<maze[y].length;x++){
+
+            if(!visible(x,y)) continue;
+
             if(maze[y][x]===1){
-                if(!visible(x,y)) continue;
                 ctx.fillStyle="white";
+                ctx.fillRect(x*tile,y*tile,tile,tile);
+            } else {
+                ctx.fillStyle="#111";
                 ctx.fillRect(x*tile,y*tile,tile,tile);
             }
         }
     }
 
-    // ITEMS (SMALL + COLORED)
+    // ---------------- ITEMS ----------------
     items.forEach(i=>{
         const idx=parseInt(i.id.slice(1));
 
+        if(!visible(i.x,i.y)) return;
+
         ctx.fillStyle=i.color;
+
         ctx.fillRect(
             i.x*tile+6,
             i.y*tile+6,
@@ -128,8 +132,10 @@ function draw(){
         );
     });
 
-    // PLAYERS
+    // ---------------- PLAYERS ----------------
     for(let p in players){
+        if(!visible(players[p].x,players[p].y)) continue;
+
         ctx.fillStyle="red";
         ctx.fillRect(players[p].x*tile,players[p].y*tile,tile,tile);
     }
