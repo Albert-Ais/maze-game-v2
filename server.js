@@ -14,8 +14,8 @@ const rooms = {};
 const ADMIN_NAME = "AAO (Albert Anyange Olang)";
 
 const COLORS = [
-    "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
-    "#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
+"#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
+"#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
 ];
 
 // ---------------- MAZE ----------------
@@ -48,11 +48,21 @@ function generateMaze(size) {
     return maze;
 }
 
+// ---------------- SAFE SPAWN ----------------
+function getEmptyTile(maze) {
+    let x, y;
+    do {
+        x = Math.floor(Math.random() * SIZE);
+        y = Math.floor(Math.random() * SIZE);
+    } while (maze[y][x] === 1);
+    return { x, y };
+}
+
 // ---------------- ROOM ----------------
 function getRoom(id) {
     if (!rooms[id]) {
-        const maze = generateMaze(SIZE);
 
+        const maze = generateMaze(SIZE);
         const items = [];
 
         for (let i = 0; i < 10; i++) {
@@ -60,16 +70,14 @@ function getRoom(id) {
                 id: "f"+i,
                 type: "fragment",
                 color: COLORS[i],
-                x: 2+i,
-                y: 2
+                ...getEmptyTile(maze)
             });
 
             items.push({
                 id: "k"+i,
                 type: "key",
                 color: COLORS[i],
-                x: 2+i,
-                y: 5
+                ...getEmptyTile(maze)
             });
         }
 
@@ -77,9 +85,8 @@ function getRoom(id) {
             maze,
             players: {},
             items,
-            startTime: Date.now(),
             leaderboard: [],
-            exitOpen: false
+            startTime: Date.now()
         };
     }
 
@@ -105,8 +112,6 @@ io.on("connection", socket => {
             name,
             x: 1,
             y: 1,
-            vx: 1,
-            vy: 1,
             fragments: [],
             keys: []
         };
@@ -120,7 +125,7 @@ io.on("connection", socket => {
         io.to(room).emit("players", r.players);
     });
 
-    // MOVE
+    // MOVE (server validation prevents wall teleport)
     socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
@@ -128,8 +133,10 @@ io.on("connection", socket => {
         const p = r.players[socket.id];
         if (!p) return;
 
-        p.x = pos.x;
-        p.y = pos.y;
+        if (r.maze[pos.y]?.[pos.x] === 0) {
+            p.x = pos.x;
+            p.y = pos.y;
+        }
 
         io.to(socket.room).emit("players", r.players);
     });
@@ -151,16 +158,22 @@ io.on("connection", socket => {
 
         r.items.splice(index, 1);
 
-        // OPEN EXIT WHEN ALL COLLECTED
-        if (r.items.length === 0) {
-            r.exitOpen = true;
-            io.to(socket.room).emit("exitOpen");
-        }
-
         io.to(socket.room).emit("itemsUpdate", r.items);
+        socket.emit("playerUpdate", p);
     });
 
-    // WIN
+    // CHAT
+    socket.on("chat", msg => {
+        const r = rooms[socket.room];
+        if (!r) return;
+
+        io.to(socket.room).emit("chat", {
+            name: r.players[socket.id]?.name,
+            msg
+        });
+    });
+
+    // WIN / SPEEDRUN
     socket.on("win", () => {
         const r = rooms[socket.room];
         if (!r) return;
@@ -174,17 +187,6 @@ io.on("connection", socket => {
         r.leaderboard.sort((a,b)=>a.time-b.time);
 
         io.to(socket.room).emit("leaderboard", r.leaderboard);
-    });
-
-    // CHAT
-    socket.on("chat", msg => {
-        const r = rooms[socket.room];
-        if (!r) return;
-
-        io.to(socket.room).emit("chat", {
-            name: r.players[socket.id]?.name,
-            msg
-        });
     });
 
 });

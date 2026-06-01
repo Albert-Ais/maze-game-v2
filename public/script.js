@@ -1,151 +1,137 @@
 const socket = io();
 
-let maze = [];
-let items = [];
-let players = {};
-let id;
-let isAdmin = false;
+let maze=[],items=[],players={},id;
+let player={x:1,y:1,fragments:[],keys:[]};
 
-const tile = 20;
+const c=document.getElementById("game");
+const ctx=c.getContext("2d");
 
-// ---------------- COLORS (10 PAIRS) ----------------
-const colors = [
-    "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
-    "#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
-];
+c.width=innerWidth;
+c.height=innerHeight;
 
-// ---------------- PLAYER ----------------
-let player = {
-    x: 1,
-    y: 1,
-    fragments: [],
-    keys: []
-};
-
-// ---------------- CANVAS ----------------
-const c = document.getElementById("game");
-const ctx = c.getContext("2d");
-
-c.width = window.innerWidth;
-c.height = window.innerHeight;
+const tile=20;
 
 // ---------------- JOIN ----------------
-function join() {
-    const name = document.getElementById("name").value.trim();
-    const room = document.getElementById("room").value.trim();
-
-    if (!name || !room) return alert("Enter name + room");
-
-    socket.emit("join", { name, room });
+function join(){
+    socket.emit("join",{
+        name:document.getElementById("name").value,
+        room:document.getElementById("room").value
+    });
 }
 
 // ---------------- SOCKET ----------------
-socket.on("init", data => {
-    maze = data.maze;
-    items = data.items;
-    id = data.id;
+socket.on("init",d=>{
+    maze=d.maze;
+    items=d.items;
+    id=d.id;
 });
 
-socket.on("admin", data => {
-    isAdmin = true;
-    maze = data.maze;
-    items = data.items;
-    players = data.players;
+socket.on("players",d=>players=d);
+
+socket.on("itemsUpdate",d=>items=d);
+
+socket.on("playerUpdate",p=>{
+    player=p;
+    document.getElementById("f").innerText=p.fragments.length;
+    document.getElementById("k").innerText=p.keys.length;
 });
 
-socket.on("players", data => players = data);
+// ---------------- CHAT ----------------
+socket.on("chat",d=>{
+    const box=document.getElementById("chatBox");
+    box.innerHTML+=`<div><b>${d.name}:</b> ${d.msg}</div>`;
+    box.scrollTop=box.scrollHeight;
+});
 
-socket.on("itemsUpdate", data => items = data);
+// ---------------- LEADERBOARD ----------------
+socket.on("leaderboard",data=>{
+    const b=document.getElementById("board");
+    b.innerHTML="";
+    data.forEach(p=>{
+        b.innerHTML+=`<div>${p.name} - ${(p.time/1000).toFixed(2)}s</div>`;
+    });
+});
 
-// ---------------- MOVEMENT (FIXED GRID) ----------------
-document.addEventListener("keydown", e => {
+// ---------------- MOVEMENT ----------------
+document.addEventListener("keydown",e=>{
+    let nx=player.x,ny=player.y;
 
-    if (isAdmin) return;
+    if(e.key==="w")ny--;
+    if(e.key==="s")ny++;
+    if(e.key==="a")nx--;
+    if(e.key==="d")nx++;
 
-    let nx = player.x;
-    let ny = player.y;
+    if(maze[ny]?.[nx]===0){
+        player.x=nx;
+        player.y=ny;
 
-    if (e.key === "w" || e.key === "ArrowUp") ny--;
-    if (e.key === "s" || e.key === "ArrowDown") ny++;
-    if (e.key === "a" || e.key === "ArrowLeft") nx--;
-    if (e.key === "d" || e.key === "ArrowRight") nx++;
-
-    if (maze[ny]?.[nx] === 0) {
-        player.x = nx;
-        player.y = ny;
-
-        socket.emit("move", player);
+        socket.emit("move",player);
 
         checkItems();
     }
 });
 
-// ---------------- ITEM COLLECT ----------------
-function checkItems() {
-    items.forEach(i => {
-        if (player.x === i.x && player.y === i.y) {
-            socket.emit("collect", i.id);
+// ---------------- COLLECT ----------------
+function checkItems(){
+    items.forEach(i=>{
+        if(player.x===i.x && player.y===i.y){
+            socket.emit("collect",i.id);
         }
     });
 }
 
-// ---------------- FULL MAP (NO FOG BUG) ----------------
-function visible() {
-    return true;
+// ---------------- SMALL VISION ----------------
+function visible(x,y){
+    return Math.abs(player.x-x)<=3 && Math.abs(player.y-y)<=3;
 }
 
-// ---------------- CAMERA (CORRECT) ----------------
-function getCamera() {
+// ---------------- CAMERA (FIXED - NO LEAD BUG) ----------------
+function cam(){
     return {
-        camX: (player.x + 0.5) * tile - c.width / 2,
-        camY: (player.y + 0.5) * tile - c.height / 2
+        x: player.x*tile - c.width/2,
+        y: player.y*tile - c.height/2
     };
 }
 
-// ---------------- DRAW LOOP ----------------
-function draw() {
+// ---------------- DRAW ----------------
+function draw(){
 
-    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.clearRect(0,0,c.width,c.height);
 
-    const { camX, camY } = getCamera();
+    const camX=cam().x;
+    const camY=cam().y;
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.translate(-camX, -camY);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.translate(-camX,-camY);
 
-    // ---------------- MAZE ----------------
-    for (let y = 0; y < maze.length; y++) {
-        for (let x = 0; x < maze[y].length; x++) {
-
-            if (maze[y][x] === 1) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(x * tile, y * tile, tile, tile);
+    // MAZE
+    for(let y=0;y<maze.length;y++){
+        for(let x=0;x<maze[y].length;x++){
+            if(maze[y][x]===1){
+                if(!visible(x,y)) continue;
+                ctx.fillStyle="white";
+                ctx.fillRect(x*tile,y*tile,tile,tile);
             }
         }
     }
 
-    // ---------------- ITEMS (SMALL + COLORED PAIRS) ----------------
-    items.forEach(i => {
+    // ITEMS (SMALL + COLORED)
+    items.forEach(i=>{
+        const idx=parseInt(i.id.slice(1));
 
-        const index = parseInt(i.id.slice(1)); // f0 / k0 → 0-9
-        const color = colors[index];
-
-        ctx.fillStyle = color;
-
-        // smaller items
+        ctx.fillStyle=i.color;
         ctx.fillRect(
-            i.x * tile + tile * 0.25,
-            i.y * tile + tile * 0.25,
-            tile * 0.5,
-            tile * 0.5
+            i.x*tile+6,
+            i.y*tile+6,
+            tile-12,
+            tile-12
         );
     });
 
-    // ---------------- PLAYERS ----------------
-    for (let pid in players) {
-        const p = players[pid];
-
-        ctx.fillStyle = pid === id ? "red" : "blue";
-        ctx.fillRect(p.x * tile, p.y * tile, tile, tile);
+    // PLAYERS
+    for(let p in players){
+        ctx.fillStyle="red";
+        ctx.fillRect(players[p].x*tile,players[p].y*tile,tile,tile);
     }
 
     requestAnimationFrame(draw);
