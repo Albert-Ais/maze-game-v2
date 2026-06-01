@@ -49,7 +49,6 @@ socket.on("itemsUpdate", d => {
 
 socket.on("playerUpdate", p => {
     if (!p) return;
-
     player = p;
 
     const f = document.getElementById("f");
@@ -122,7 +121,7 @@ function checkItems() {
 }
 
 /* =========================
-   VISION (SMALL CIRCLE)
+   SMALL VISION
 ========================= */
 function visible(x, y) {
     const dx = player.x - x;
@@ -131,7 +130,7 @@ function visible(x, y) {
 }
 
 /* =========================
-   DRAW LOOP
+   DRAW (CENTERED CAMERA)
 ========================= */
 function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -142,15 +141,21 @@ function draw() {
         return;
     }
 
+    /* =========================
+       CAMERA OFFSET (CENTERED)
+    ========================= */
+    const camX = player.x * tile - c.width / 2;
+    const camY = player.y * tile - c.height / 2;
+
+    ctx.translate(-camX, -camY);
+
     /* ---------------- MAZE ---------------- */
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
 
-            // floor always visible
             ctx.fillStyle = "#111";
             ctx.fillRect(x * tile, y * tile, tile, tile);
 
-            // walls only in vision
             if (maze[y][x] === 1 && visible(x, y)) {
                 ctx.fillStyle = "#fff";
                 ctx.fillRect(x * tile, y * tile, tile, tile);
@@ -162,7 +167,6 @@ function draw() {
     for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it) continue;
-
         if (!visible(it.x, it.y)) continue;
 
         ctx.fillStyle = it.color || "cyan";
