@@ -1,6 +1,9 @@
 const socket = io();
 
-let maze = [], items = [], players = {}, id;
+let maze = [];
+let items = [];
+let players = {};
+let id;
 
 let player = {
     x: 1,
@@ -82,7 +85,11 @@ document.addEventListener("keydown", e => {
         player.x = nx;
         player.y = ny;
 
-        socket.emit("move", player);
+        socket.emit("move", {
+            x: player.x,
+            y: player.y
+        });
+
         checkItems();
     }
 });
@@ -90,23 +97,30 @@ document.addEventListener("keydown", e => {
 // ---------------- ITEMS ----------------
 function checkItems() {
     items.forEach(i => {
-        if (player.x === i.x && player.y === i.y) {
+        if (!i) return;
+
+        const dx = player.x - i.x;
+        const dy = player.y - i.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= 1) {
             socket.emit("collect", i.id);
         }
     });
 }
 
-// ---------------- SMALL VISION ----------------
+// ---------------- VISION ----------------
 function visible(x, y) {
-    return Math.abs(player.x - x) <= 3 &&
-           Math.abs(player.y - y) <= 3;
+    const dx = player.x - x;
+    const dy = player.y - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    return dist <= 3.8;
 }
 
 // ---------------- DRAW ----------------
 function draw() {
-
     ctx.clearRect(0, 0, c.width, c.height);
-
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     if (!maze.length) {
@@ -118,13 +132,14 @@ function draw() {
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
 
-            // IMPORTANT: always draw floor for stability
             ctx.fillStyle = "#111";
             ctx.fillRect(x * tile, y * tile, tile, tile);
 
-            if (maze[y][x] === 1 && visible(x, y)) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(x * tile, y * tile, tile, tile);
+            if (visible(x, y)) {
+                if (maze[y][x] === 1) {
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(x * tile, y * tile, tile, tile);
+                }
             }
         }
     }
@@ -136,26 +151,29 @@ function draw() {
 
         ctx.fillStyle = i.color || "cyan";
 
+        const size = tile * 0.6;
+        const pad = (tile - size) / 2;
+
         ctx.fillRect(
-            i.x * tile + 6,
-            i.y * tile + 6,
-            tile - 12,
-            tile - 12
+            i.x * tile + pad,
+            i.y * tile + pad,
+            size,
+            size
         );
     });
 
     // ---------------- PLAYERS ----------------
     for (let p in players) {
         if (!players[p]) continue;
-
         if (!visible(players[p].x, players[p].y)) continue;
 
         ctx.fillStyle = "red";
+
         ctx.fillRect(
-            players[p].x * tile,
-            players[p].y * tile,
-            tile,
-            tile
+            players[p].x * tile + 2,
+            players[p].y * tile + 2,
+            tile - 4,
+            tile - 4
         );
     }
 
