@@ -21,6 +21,12 @@ c.height = window.innerHeight;
 const tile = 20;
 
 /* =========================
+   SMOOTH CAMERA
+========================= */
+let camX = 0;
+let camY = 0;
+
+/* =========================
    JOIN
 ========================= */
 function join() {
@@ -49,6 +55,7 @@ socket.on("itemsUpdate", d => {
 
 socket.on("playerUpdate", p => {
     if (!p) return;
+
     player = p;
 
     const f = document.getElementById("f");
@@ -108,7 +115,7 @@ document.addEventListener("keydown", e => {
 });
 
 /* =========================
-   ITEM COLLECTION
+   ITEMS
 ========================= */
 function checkItems() {
     items.forEach(i => {
@@ -130,9 +137,10 @@ function visible(x, y) {
 }
 
 /* =========================
-   DRAW (CENTERED CAMERA)
+   DRAW LOOP
 ========================= */
 function draw() {
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, c.width, c.height);
 
@@ -142,10 +150,13 @@ function draw() {
     }
 
     /* =========================
-       CAMERA OFFSET (CENTERED)
+       SMOOTH CENTERED CAMERA
     ========================= */
-    const camX = player.x * tile - c.width / 2;
-    const camY = player.y * tile - c.height / 2;
+    const targetX = player.x * tile - c.width / 2;
+    const targetY = player.y * tile - c.height / 2;
+
+    camX += (targetX - camX) * 0.12;
+    camY += (targetY - camY) * 0.12;
 
     ctx.translate(-camX, -camY);
 
@@ -171,7 +182,7 @@ function draw() {
 
         ctx.fillStyle = it.color || "cyan";
 
-        const size = tile * 0.6;
+        const size = tile * 0.55;
         const pad = (tile - size) / 2;
 
         ctx.fillRect(
