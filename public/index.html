@@ -1,46 +1,137 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>AAA Maze</title>
-<style>
-body{margin:0;overflow:hidden;background:#000;}
+<meta charset="utf-8" />
+<title>Ultra Ultra Pro Maze Game</title>
 
-#menu{
-position:absolute;
-top:40%;left:50%;
-transform:translate(-50%,-50%);
-background:#222;
-padding:20px;
-color:white;
+<style>
+body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    font-family: Arial, sans-serif;
 }
 
-#chat{
-position:absolute;
-bottom:10px;
-left:10px;
-width:250px;
-height:200px;
-overflow:auto;
-background:#111;
-color:white;
-font-size:12px;
-padding:5px;
+/* ================= CANVAS ================= */
+canvas {
+    display: block;
+}
+
+/* ================= HUD ================= */
+#hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: white;
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 8px;
+    width: 220px;
+}
+
+/* GAME STATE */
+#state {
+    font-size: 16px;
+    color: yellow;
+    margin-bottom: 8px;
+}
+
+/* TIMER */
+#timer {
+    font-size: 14px;
+    color: #00ffcc;
+    margin-bottom: 8px;
+}
+
+/* LEADERBOARD */
+#leaderboard {
+    margin-top: 8px;
+    max-height: 140px;
+    overflow-y: auto;
+    border-top: 1px solid #333;
+    padding-top: 5px;
+    font-size: 12px;
+}
+
+/* CHAT BOX */
+#chatBox {
+    height: 120px;
+    overflow-y: auto;
+    background: black;
+    border: 1px solid #333;
+    margin-top: 8px;
+    padding: 5px;
+    font-size: 12px;
+}
+
+/* CHAT INPUT */
+#chatInput {
+    width: 140px;
+    margin-top: 5px;
+}
+
+/* BUTTON */
+button {
+    cursor: pointer;
+}
+
+/* ================= QUIZ ================= */
+#quizBox {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: #111;
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    display: none;
+    width: 300px;
+    text-align: center;
+}
+
+#options button {
+    display: block;
+    width: 100%;
+    margin-top: 5px;
+    padding: 5px;
 }
 </style>
+
 </head>
+
 <body>
-
-<div id="menu">
-<input id="name" placeholder="Name"><br>
-<input id="room" placeholder="Room"><br>
-<button onclick="join()">Play</button>
-</div>
-
-<div id="chat"></div>
 
 <canvas id="game"></canvas>
 
+<!-- ================= HUD ================= -->
+<div id="hud">
+
+    <div id="state">lobby</div>
+
+    <div id="timer">Time: 0s</div>
+
+    <div><b>Leaderboard</b></div>
+    <div id="leaderboard"></div>
+
+    <div><b>Chat</b></div>
+    <div id="chatBox"></div>
+
+    <input id="chatInput" placeholder="Type message..." />
+    <button onclick="sendChat()">Send</button>
+
+</div>
+
+<!-- ================= QUIZ ================= -->
+<div id="quizBox">
+    <div id="question"></div>
+    <div id="options"></div>
+</div>
+
+<!-- SOCKET.IO -->
 <script src="/socket.io/socket.io.js"></script>
+
+<!-- GAME SCRIPT -->
 <script src="script.js"></script>
 
 </body>

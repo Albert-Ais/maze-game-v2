@@ -9,179 +9,210 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 const SIZE = 35;
+
+// ---------------- GLOBAL STATE ----------------
 const rooms = {};
+const leaderboards = {};
 
-const COLORS = ["#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
-"#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"];
+// ---------------- GAME STATE MACHINE ----------------
+const STATE = {
+    LOBBY: "lobby",
+    PLAYING: "playing",
+    FINISHED: "finished"
+};
 
-const SUBJECTS = [
-"math","cs","english","bio","chem",
-"physics","geo","econ","biz","soc"
-];
+// ---------------- ROOM CREATION ----------------
+function createRoom(id){
+    if (rooms[id]) return rooms[id];
 
-// ---------------- QUESTIONS (50 EACH) ----------------
-function makeQuestions(){
-    const db = {};
-    for(let s of SUBJECTS){
-        db[s]=[];
-        for(let i=1;i<=50;i++){
-            db[s].push({
-                q:`${s.toUpperCase()} Q${i}: Solve ${i}+${i} = ?`,
-                a:String(i+i)
-            });
-        }
-    }
-    return db;
-}
+    const maze = Array.from({length:SIZE},()=>Array(SIZE).fill(1));
 
-// ---------------- MAZE ----------------
-function generateMaze(size){
-    const maze = Array.from({length:size},()=>Array(size).fill(1));
+    const items = [];
 
-    function carve(x,y){
-        maze[y][x]=0;
-        const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
+    const questions = {};
+    const subjects = ["math","cs","eng","bio","chem","phy","geo","eco","biz","soc"];
 
-        for(let [dx,dy] of dirs){
-            let nx=x+dx, ny=y+dy;
-            if(nx>0&&ny>0&&nx<size-1&&ny<size-1&&maze[ny][nx]===1){
-                maze[y+dy/2][x+dx/2]=0;
-                carve(nx,ny);
-            }
-        }
-    }
+    subjects.forEach(s=>{
+        questions[s]=Array.from({length:50},(_,i)=>({
+            q:`${s.toUpperCase()} Q${i+1}`,
+            options:["A","B","C","D"],
+            a:0
+        }));
+    });
 
-    carve(1,1);
-    return maze;
-}
+    rooms[id] = {
+        maze,
+        items,
+        players:{},
+        questions,
+        state: STATE.LOBBY,
+        startTime:0
+    };
 
-function openTile(maze){
-    let x,y;
-    do{
-        x=Math.floor(Math.random()*SIZE);
-        y=Math.floor(Math.random()*SIZE);
-    }while(maze[y][x]===1);
-    return {x,y};
-}
+    leaderboards[id] = [];
 
-// ---------------- ROOM ----------------
-function getRoom(id){
-    if(!rooms[id]){
-        const maze=generateMaze(SIZE);
-        const items=[];
-        const questions=makeQuestions();
-
-        for(let i=0;i<10;i++){
-            items.push({
-                id:"f"+i,
-                type:"fragment",
-                color:COLORS[i],
-                subject:SUBJECTS[i],
-                ...openTile(maze)
-            });
-
-            items.push({
-                id:"k"+i,
-                type:"key",
-                color:COLORS[i],
-                subject:SUBJECTS[i],
-                ...openTile(maze)
-            });
-        }
-
-        rooms[id]={
-            maze,
-            items,
-            players:{},
-            questions,
-            startTime:Date.now(),
-            finished:false,
-            exitUnlocked:false
-        };
-    }
     return rooms[id];
 }
 
+// ---------------- AUTHORIZED MOVE SYSTEM ----------------
+function canMove(p, x, y){
+    const dx = Math.abs(p.x - x);
+    const dy = Math.abs(p.y - y);
+    return dx + dy === 1;
+}
+
+// ---------------- FINISH SYSTEM ----------------
+function finishPlayer(roomId, socketId){
+    const r = rooms[roomId];
+    const p = r.players[socketId];
+
+    if (!p || p.finished) return;
+
+    p.finished = true;
+
+    const time = Date.now() - r.startTime;
+
+    leaderboards[roomId].push({
+        name: p.name,
+        time
+    });
+
+    leaderboards[roomId].sort((a,b)=>a.time-b.time);
+
+    io.to(roomId).emit("leaderboard", leaderboards[roomId]);
+
+    // if all finished → end match
+    const allFinished = Object.values(r.players).every(pl => pl.finished);
+
+    if (allFinished) {
+        r.state = STATE.FINISHED;
+        io.to(roomId).emit("gameOver");
+    }
+}
+
 // ---------------- SOCKET ----------------
-io.on("connection",socket=>{
+io.on("connection",(socket)=>{
 
 socket.on("join",({name,room})=>{
-    const r=getRoom(room);
-    socket.room=room;
+    const r = createRoom(room);
+
+    socket.room = room;
     socket.join(room);
 
-    r.players[socket.id]={
+    r.players[socket.id] = {
         name,
-        x:1,y:1,
-        frozenUntil:0,
-        fragments:[],
-        keys:[]
+        x:1,
+        y:1,
+        fragments:0,
+        keys:0,
+        finished:false
     };
 
+    socket.emit("state", r.state);
     socket.emit("init",{maze:r.maze,items:r.items});
     io.to(room).emit("players",r.players);
 });
 
-// ---------------- MOVE ----------------
-socket.on("move",pos=>{
-    const r=rooms[socket.room];
-    if(!r) return;
+// ---------------- START GAME (AUTO) ----------------
+function startGame(roomId){
+    const r = rooms[roomId];
+    if (!r) return;
 
-    const p=r.players[socket.id];
-    if(!p) return;
+    r.state = STATE.PLAYING;
+    r.startTime = Date.now();
 
-    if(Date.now()<p.frozenUntil) return;
+    io.to(roomId).emit("state", STATE.PLAYING);
+}
 
-    if(r.maze[pos.y]?.[pos.x]===0){
-        p.x=pos.x;
-        p.y=pos.y;
+// auto start when 2+ players
+setInterval(()=>{
+    for (let id in rooms){
+        const r = rooms[id];
+        if (r.state === STATE.LOBBY && Object.keys(r.players).length >= 2){
+            startGame(id);
+        }
+    }
+},2000);
+
+// ---------------- MOVE (ULTRA CLEAN) ----------------
+socket.on("move",({x,y})=>{
+    const r = rooms[socket.room];
+    if (!r || r.state !== STATE.PLAYING) return;
+
+    const p = r.players[socket.id];
+    if (!p) return;
+
+    if (!canMove(p,x,y)) return;
+
+    if (r.maze[y]?.[x] === 0){
+        p.x = x;
+        p.y = y;
     }
 
-    io.to(socket.room).emit("players",r.players);
+    io.to(socket.room).emit("players", r.players);
 });
 
 // ---------------- QUIZ ----------------
-socket.on("requestQuiz",({itemId})=>{
-    const r=rooms[socket.room];
-    const item=r.items.find(i=>i.id===itemId);
-    if(!item) return;
+socket.on("quizRequest",({itemId})=>{
+    const r = rooms[socket.room];
+    if (!r) return;
 
-    const pool=r.questions[item.subject];
-    const q=pool[Math.floor(Math.random()*pool.length)];
+    const item = r.items.find(i=>i.id===itemId);
+    if (!item) return;
 
-    socket.emit("quizPopup",{itemId,q:q.q,a:q.a});
+    const q = r.questions[item.subject][0];
+
+    socket.emit("quiz",{
+        itemId,
+        q:q.q,
+        options:q.options,
+        a:q.a
+    });
 });
 
 // ---------------- ANSWER ----------------
-socket.on("submitQuiz",data=>{
-    const r=rooms[socket.room];
-    const p=r.players[socket.id];
-    const item=r.items.find(i=>i.id===data.itemId);
-    if(!p||!item) return;
+socket.on("answer",({itemId,answer,correct})=>{
+    const r = rooms[socket.room];
+    const p = r.players[socket.id];
+    if (!r || !p) return;
 
-    if(data.answer===data.correct){
+    const item = r.items.find(i=>i.id===itemId);
+    if (!item) return;
 
-        if(item.type==="fragment") p.fragments.push(item.id);
-        else p.keys.push(item.id);
+    if (answer === correct){
+        if (item.type==="fragment") p.fragments++;
+        else p.keys++;
 
-        r.items=r.items.filter(i=>i.id!==item.id);
+        r.items = r.items.filter(i=>i.id!==itemId);
 
+        if (p.fragments>=10 && p.keys>=10){
+            finishPlayer(socket.room,socket.id);
+        }
     } else {
-        p.x=1;p.y=1;
-        p.frozenUntil=Date.now()+4000;
+        p.x = 1;
+        p.y = 1;
     }
-
-    io.to(socket.room).emit("itemsUpdate",r.items);
-    socket.emit("playerUpdate",p);
 });
 
 // ---------------- CHAT ----------------
-socket.on("chat",msg=>{
-    const r=rooms[socket.room];
+socket.on("chat",(msg)=>{
+    const r = rooms[socket.room];
+    if (!r) return;
+
     io.to(socket.room).emit("chat",{
         name:r.players[socket.id]?.name,
         msg
     });
+});
+
+// ---------------- DISCONNECT CLEANUP ----------------
+socket.on("disconnect",()=>{
+    const r = rooms[socket.room];
+    if (!r) return;
+
+    delete r.players[socket.id];
+
+    io.to(socket.room).emit("players",r.players);
 });
 
 });
