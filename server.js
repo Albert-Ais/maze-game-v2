@@ -9,32 +9,27 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 const SIZE = 35;
-
 const rooms = {};
-
-const ADMIN_NAME = "AAO (Albert Anyange Olang)";
 
 const COLORS = [
 "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
 "#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
 ];
 
-// ---------------- QUESTIONS (SIMPLIFIED SAMPLE EXPANDABLE) ----------------
-const SUBJECTS = ["math","cs","english","bio","chem","physics","geo","econ","business","sociology"];
-
-function generateQuestions() {
+// ---------------- QUESTION BANK (50 EACH SUBJECT) ----------------
+function makeQuestions() {
+    const subjects = ["math","cs","english","bio","chem","physics","geo","econ","biz","soc"];
     const db = {};
 
-    for (let s of SUBJECTS) {
+    for (let s of subjects) {
         db[s] = [];
         for (let i = 1; i <= 50; i++) {
             db[s].push({
-                q: `${s.toUpperCase()} Question ${i}: What is ${i} + ${i}?`,
+                q: `${s.toUpperCase()} Q${i}: Solve ${i} + ${i} = ?`,
                 a: String(i + i)
             });
         }
     }
-
     return db;
 }
 
@@ -46,17 +41,15 @@ function generateMaze(size) {
 
     function carve(x, y) {
         maze[y][x] = 0;
+        const dirs = [[2,0],[-2,0],[0,2],[0,-2]].sort(() => Math.random()-0.5);
 
-        const dirs = [[2,0],[-2,0],[0,2],[0,-2]]
-            .sort(() => Math.random() - 0.5);
-
-        for (const [dx, dy] of dirs) {
-            const nx = x + dx;
-            const ny = y + dy;
+        for (let [dx,dy] of dirs) {
+            let nx = x + dx;
+            let ny = y + dy;
 
             if (
                 nx > 0 && ny > 0 &&
-                nx < size - 1 && ny < size - 1 &&
+                nx < size-1 && ny < size-1 &&
                 maze[ny][nx] === 1
             ) {
                 maze[y + dy/2][x + dx/2] = 0;
@@ -65,54 +58,53 @@ function generateMaze(size) {
         }
     }
 
-    carve(1, 1);
+    carve(1,1);
     return maze;
 }
 
 // ---------------- SAFE TILE ----------------
-function openTile(maze) {
-    let x, y;
+function openTile(maze){
+    let x,y;
     do {
-        x = Math.floor(Math.random() * SIZE);
-        y = Math.floor(Math.random() * SIZE);
+        x = Math.floor(Math.random()*SIZE);
+        y = Math.floor(Math.random()*SIZE);
     } while (maze[y][x] === 1);
-    return { x, y };
+    return {x,y};
 }
 
 // ---------------- ROOM ----------------
-function getRoom(id) {
+function getRoom(id){
     if (!rooms[id]) {
+
         const maze = generateMaze(SIZE);
-        const questions = generateQuestions();
-
         const items = [];
+        const questions = makeQuestions();
 
-        for (let i = 0; i < 10; i++) {
+        for (let i=0;i<10;i++){
             items.push({
-                id: "f"+i,
-                type: "fragment",
-                subject: SUBJECTS[i],
-                color: COLORS[i],
+                id:"f"+i,
+                type:"fragment",
+                color:COLORS[i],
+                subject:Object.keys(questions)[i%10],
                 ...openTile(maze)
             });
 
             items.push({
-                id: "k"+i,
-                type: "key",
-                subject: SUBJECTS[i],
-                color: COLORS[i],
+                id:"k"+i,
+                type:"key",
+                color:COLORS[i],
+                subject:Object.keys(questions)[i%10],
                 ...openTile(maze)
             });
         }
 
         rooms[id] = {
             maze,
-            players: {},
             items,
+            players:{},
             questions,
-            startTime: Date.now(),
-            exitUnlocked: false,
-            leaderboard: []
+            leaderboard:[],
+            startTime:Date.now()
         };
     }
 
@@ -122,38 +114,31 @@ function getRoom(id) {
 // ---------------- SOCKET ----------------
 io.on("connection", socket => {
 
-    socket.on("join", ({ name, room }) => {
+    socket.on("join", ({name,room}) => {
 
         const r = getRoom(room);
         socket.room = room;
         socket.join(room);
 
-        if (name.trim().toLowerCase() === ADMIN_NAME.toLowerCase()) {
-            socket.isAdmin = true;
-            socket.emit("admin", r);
-            return;
-        }
-
         r.players[socket.id] = {
             name,
-            x: 1,
-            y: 1,
-            frozenUntil: 0,
-            fragments: [],
-            keys: []
+            x:1,
+            y:1,
+            fragments:[],
+            keys:[],
+            frozenUntil:0
         };
 
         socket.emit("init", {
-            maze: r.maze,
-            items: r.items,
-            startTime: r.startTime,
-            id: socket.id
+            maze:r.maze,
+            items:r.items,
+            id:socket.id
         });
 
         io.to(room).emit("players", r.players);
     });
 
-    // MOVE
+    // ---------------- MOVE ----------------
     socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
@@ -171,65 +156,60 @@ io.on("connection", socket => {
         io.to(socket.room).emit("players", r.players);
     });
 
-    // QUIZ BEFORE COLLECT
-    socket.on("quizAnswer", ({ itemId, answer }) => {
+    // ---------------- QUIZ REQUEST ----------------
+    socket.on("requestQuiz", ({itemId}) => {
         const r = rooms[socket.room];
         if (!r) return;
 
-        const p = r.players[socket.id];
-        const item = r.items.find(i => i.id === itemId);
-        if (!p || !item) return;
+        const item = r.items.find(i=>i.id===itemId);
+        if (!item) return;
 
-        const qList = r.questions[item.subject];
-        const q = qList[Math.floor(Math.random() * qList.length)];
+        const pool = r.questions[item.subject];
+        const q = pool[Math.floor(Math.random()*pool.length)];
 
-        if (answer === q.a) {
-            if (item.type === "fragment") p.fragments.push(itemId);
-            else p.keys.push(itemId);
-
-            r.items = r.items.filter(i => i.id !== itemId);
-
-            io.to(socket.room).emit("itemsUpdate", r.items);
-            socket.emit("playerUpdate", p);
-
-            // check win
-            if (p.keys.length === 10 && p.fragments.length === 10) {
-                r.exitUnlocked = true;
-                io.to(socket.room).emit("exitUnlocked");
-            }
-        } else {
-            // penalty
-            p.x = 1;
-            p.y = 1;
-            p.frozenUntil = Date.now() + 2000;
-
-            socket.emit("penalty", "Wrong answer!");
-        }
-    });
-
-    // CHAT
-    socket.on("chat", msg => {
-        const r = rooms[socket.room];
-        if (!r) return;
-
-        io.to(socket.room).emit("chat", {
-            name: r.players[socket.id]?.name || "Player",
-            msg
+        socket.emit("quizPopup", {
+            itemId,
+            question:q.q,
+            answer:q.a
         });
     });
 
-    // SPEEDRUN END
-    socket.on("win", () => {
+    // ---------------- QUIZ RESULT ----------------
+    socket.on("submitQuiz", data => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
-        const time = Date.now() - r.startTime;
+        const item = r.items.find(i=>i.id===data.itemId);
+        if (!p || !item) return;
 
-        r.leaderboard.push({ name: p.name, time });
-        r.leaderboard.sort((a,b)=>a.time-b.time);
+        if (data.answer === data.correct) {
 
-        io.to(socket.room).emit("leaderboard", r.leaderboard);
+            if (item.type==="fragment") p.fragments.push(item.id);
+            else p.keys.push(item.id);
+
+            r.items = r.items.filter(i=>i.id!==item.id);
+
+        } else {
+
+            p.x = 1;
+            p.y = 1;
+            p.frozenUntil = Date.now() + 5000;
+        }
+
+        io.to(socket.room).emit("itemsUpdate", r.items);
+        socket.emit("playerUpdate", p);
+    });
+
+    // ---------------- CHAT ----------------
+    socket.on("chat", msg=>{
+        const r = rooms[socket.room];
+        if (!r) return;
+
+        io.to(socket.room).emit("chat",{
+            name:r.players[socket.id]?.name,
+            msg
+        });
     });
 
 });
