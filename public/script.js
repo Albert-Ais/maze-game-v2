@@ -1,111 +1,105 @@
+console.log("✅ script.js loaded");
+
 const socket = io();
 
+console.log("🔌 socket created");
+
+// DOM check
 const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const ctx = canvas ? canvas.getContext("2d") : null;
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+if (!canvas) {
+  console.error("❌ Canvas NOT FOUND (check index.html id='game')");
+} else {
+  console.log("🎮 Canvas found");
+}
 
-let state = { players: {}, fragments: [] };
+if (canvas) {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
 
+// STATE
+let state = {
+  players: {},
+  fragments: []
+};
+
+// JOIN GAME
 function join() {
+  const name = document.getElementById("name").value;
+  const room = document.getElementById("room").value;
+
+  console.log("🚀 join clicked", name, room);
+
   socket.emit("joinRoom", {
-    name: document.getElementById("name").value,
-    roomId: document.getElementById("room").value
+    name,
+    roomId: room
   });
 
   document.getElementById("menu").style.display = "none";
 }
 
+// SOCKET CONNECT
+socket.on("connect", () => {
+  console.log("🟢 Connected to server:", socket.id);
+});
+
+socket.on("disconnect", () => {
+  console.log("🔴 Disconnected from server");
+});
+
+// RECEIVE STATE
 socket.on("state", (data) => {
+  console.log("📦 state received:", data);
+
   state = data;
 });
 
+// SIMPLE QUESTION TEST
 socket.on("question", (data) => {
-  const box = document.getElementById("questionBox");
-  const q = document.getElementById("q");
-  const opts = document.getElementById("opts");
+  console.log("❓ question received:", data);
 
-  box.classList.remove("hidden");
+  alert(
+    data.question.q +
+    "\n\nOptions: " +
+    data.question.options.join(", ")
+  );
 
-  q.innerText = data.question.q;
-  opts.innerHTML = "";
-
-  data.question.options.forEach((o, i) => {
-    const btn = document.createElement("button");
-    btn.innerText = o;
-
-    btn.onclick = () => {
-      socket.emit("answer", {
-        fragmentId: data.fragmentId,
-        correct: i === data.question.answer
-      });
-
-      box.classList.add("hidden");
-    };
-
-    opts.appendChild(btn);
+  socket.emit("answer", {
+    fragmentId: data.fragmentId,
+    correct: true
   });
 });
 
-// movement + touch detection
-document.addEventListener("keydown", (e) => {
-  const me = state.players[socket.id];
-  if (!me) return;
-
-  if (e.key === "w") me.x = me.x, me.y--;
-  if (e.key === "s") me.y++;
-  if (e.key === "a") me.x--;
-  if (e.key === "d") me.x++;
-
-  socket.emit("move", { x: me.x, y: me.y });
-
-  for (const f of state.fragments) {
-    if (f.x === me.x && f.y === me.y) {
-      socket.emit("touchFragment", { fragmentId: f.id });
-    }
-  }
-});
-
-// DRAW LOOP (NO GRAY SCREEN)
+// SIMPLE DRAW TEST (NO MAZE, JUST PROOF IT WORKS)
 function draw() {
+  if (!ctx) return;
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // grid maze
-  ctx.strokeStyle = "#222";
-  for (let i = 0; i < 40; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * 30, 0);
-    ctx.lineTo(i * 30, canvas.height);
-    ctx.stroke();
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
 
-    ctx.beginPath();
-    ctx.moveTo(0, i * 30);
-    ctx.lineTo(canvas.width, i * 30);
-    ctx.stroke();
-  }
-
-  // fragments
-  for (const f of state.fragments) {
-    ctx.fillStyle = "yellow";
-    ctx.fillRect(f.x * 30, f.y * 30, 20, 20);
-  }
-
-  // players
-  for (const id in state.players) {
-    const p = state.players[id];
-
-    ctx.fillStyle = "cyan";
-    ctx.fillRect(p.x * 30, p.y * 30, 20, 20);
-
-    ctx.fillStyle = "white";
-    ctx.fillText(p.name, p.x * 30, p.y * 30 - 5);
-  }
+  ctx.fillText("MAZE TEST MODE ACTIVE", 50, 50);
+  ctx.fillText("Players: " + Object.keys(state.players).length, 50, 80);
+  ctx.fillText("Fragments: " + state.fragments.length, 50, 110);
 
   requestAnimationFrame(draw);
 }
 
 draw();
+
+// TEST KEY (forces fragment trigger)
+document.addEventListener("keydown", (e) => {
+  if (e.key === "f") {
+    console.log("⚡ test fragment trigger");
+
+    socket.emit("touchFragment", {
+      fragmentId: 1
+    });
+  }
+});
