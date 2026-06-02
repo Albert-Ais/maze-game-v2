@@ -2,19 +2,44 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Ultra Ultra Pro Maze Game</title>
+<title>Maze Multiplayer Pro</title>
 
 <style>
 body {
     margin: 0;
     overflow: hidden;
+    font-family: Arial;
     background: black;
-    font-family: Arial, sans-serif;
 }
 
-/* ================= CANVAS ================= */
+/* CANVAS */
 canvas {
     display: block;
+}
+
+/* ================= LOBBY ================= */
+#menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: rgba(0,0,0,0.85);
+    padding: 20px;
+    border-radius: 10px;
+    color: white;
+    text-align: center;
+}
+
+#menu input {
+    display: block;
+    margin: 10px auto;
+    padding: 8px;
+    width: 200px;
+}
+
+#menu button {
+    padding: 10px 20px;
+    cursor: pointer;
 }
 
 /* ================= HUD ================= */
@@ -23,56 +48,15 @@ canvas {
     top: 10px;
     left: 10px;
     color: white;
-    background: rgba(0,0,0,0.7);
+    background: rgba(0,0,0,0.6);
     padding: 10px;
     border-radius: 8px;
     width: 220px;
 }
 
-/* GAME STATE */
 #state {
-    font-size: 16px;
     color: yellow;
-    margin-bottom: 8px;
-}
-
-/* TIMER */
-#timer {
-    font-size: 14px;
-    color: #00ffcc;
-    margin-bottom: 8px;
-}
-
-/* LEADERBOARD */
-#leaderboard {
-    margin-top: 8px;
-    max-height: 140px;
-    overflow-y: auto;
-    border-top: 1px solid #333;
-    padding-top: 5px;
-    font-size: 12px;
-}
-
-/* CHAT BOX */
-#chatBox {
-    height: 120px;
-    overflow-y: auto;
-    background: black;
-    border: 1px solid #333;
-    margin-top: 8px;
-    padding: 5px;
-    font-size: 12px;
-}
-
-/* CHAT INPUT */
-#chatInput {
-    width: 140px;
-    margin-top: 5px;
-}
-
-/* BUTTON */
-button {
-    cursor: pointer;
+    margin-bottom: 5px;
 }
 
 /* ================= QUIZ ================= */
@@ -86,7 +70,7 @@ button {
     padding: 20px;
     border-radius: 10px;
     display: none;
-    width: 300px;
+    width: 280px;
     text-align: center;
 }
 
@@ -94,7 +78,6 @@ button {
     display: block;
     width: 100%;
     margin-top: 5px;
-    padding: 5px;
 }
 </style>
 
@@ -102,24 +85,24 @@ button {
 
 <body>
 
+<!-- ================= LOBBY ================= -->
+<div id="menu">
+    <h2>Maze Game</h2>
+
+    <input id="name" placeholder="Enter Name" />
+    <input id="room" placeholder="Room ID" />
+
+    <button onclick="joinGame()">PLAY</button>
+
+    <p id="status"></p>
+</div>
+
+<!-- ================= CANVAS ================= -->
 <canvas id="game"></canvas>
 
 <!-- ================= HUD ================= -->
 <div id="hud">
-
     <div id="state">lobby</div>
-
-    <div id="timer">Time: 0s</div>
-
-    <div><b>Leaderboard</b></div>
-    <div id="leaderboard"></div>
-
-    <div><b>Chat</b></div>
-    <div id="chatBox"></div>
-
-    <input id="chatInput" placeholder="Type message..." />
-    <button onclick="sendChat()">Send</button>
-
 </div>
 
 <!-- ================= QUIZ ================= -->
@@ -128,10 +111,7 @@ button {
     <div id="options"></div>
 </div>
 
-<!-- SOCKET.IO -->
 <script src="/socket.io/socket.io.js"></script>
-
-<!-- GAME SCRIPT -->
 <script src="script.js"></script>
 
 </body>
