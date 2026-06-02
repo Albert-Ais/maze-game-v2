@@ -12,11 +12,24 @@ app.use(express.static("public"));
 
 initQuestions();
 
-// ===================== MAP =====================
+// ===================== SUBJECTS =====================
+const SUBJECTS = [
+  "math",
+  "english",
+  "biology",
+  "chemistry",
+  "physics",
+  "economics",
+  "geography",
+  "business",
+  "computer_science",
+  "sociology"
+];
+
+// ===================== MAZE =====================
 const W = 25;
 const H = 25;
 
-// 1 = wall, 0 = path
 let maze = Array.from({ length: H }, () =>
   Array.from({ length: W }, () => 1)
 );
@@ -38,17 +51,25 @@ function carve(x, y) {
 }
 
 carve(1, 1);
+carve(3, 1);
+carve(1, 3);
 
 // ===================== GAME STATE =====================
 const players = {};
 
-let fragments = [
-  { id: 1, x: 3, y: 3, color: "math" },
-  { id: 2, x: 7, y: 4, color: "english" },
-  { id: 3, x: 11, y: 8, color: "biology" },
-  { id: 4, x: 15, y: 10, color: "chemistry" }
-];
+// ===================== FRAGMENTS =====================
+let fragments = [];
 
+for (let i = 0; i < 10; i++) {
+  fragments.push({
+    id: i + 1,
+    x: 2 + i * 2,
+    y: 2 + (i % 5) * 4,
+    subject: SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)]
+  });
+}
+
+// ===================== EXIT =====================
 let exit = { x: W - 2, y: H - 2, unlocked: false };
 
 // ===================== SOCKET =====================
@@ -90,7 +111,7 @@ io.on("connection", (socket) => {
     const f = fragments.find(x => x.id === fragmentId);
     if (!p || !f) return;
 
-    const question = getRandomQuestion(f.color, p.roomId);
+    const question = getRandomQuestion(f.subject);
 
     socket.emit("question", {
       fragmentId,
