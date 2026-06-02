@@ -1,14 +1,8 @@
 body {
   margin: 0;
-  font-family: Arial;
+  overflow: hidden;
   background: black;
-  color: white;
-}
-
-#menu {
-  position: absolute;
-  top: 20px;
-  left: 20px;
+  font-family: Arial;
 }
 
 canvas {
@@ -16,10 +10,16 @@ canvas {
   background: #111;
 }
 
+#menu {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+
 #questionBox {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
+  bottom: 10px;
+  left: 10px;
   background: white;
   color: black;
   padding: 10px;

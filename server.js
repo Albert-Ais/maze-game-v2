@@ -1,7 +1,6 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-
 const { initQuestions, getRandomQuestion } = require("./questions");
 
 const app = express();
@@ -14,8 +13,16 @@ initQuestions();
 
 const players = {};
 
+// 🔥 MAZE FRAGMENTS (world objects)
+let fragments = [
+  { id: 1, x: 4, y: 4, color: "math" },
+  { id: 2, x: 8, y: 5, color: "english" },
+  { id: 3, x: 12, y: 7, color: "biology" },
+  { id: 4, x: 6, y: 10, color: "chemistry" },
+  { id: 5, x: 10, y: 12, color: "physics" }
+];
+
 io.on("connection", (socket) => {
-  console.log("Player connected:", socket.id);
 
   socket.on("joinRoom", ({ name, roomId }) => {
     socket.join(roomId);
@@ -24,41 +31,59 @@ io.on("connection", (socket) => {
       id: socket.id,
       name,
       roomId,
+      x: 1,
+      y: 1,
       fragments: 0
     };
 
-    io.to(roomId).emit("players", players);
+    io.to(roomId).emit("state", { players, fragments });
   });
 
-  socket.on("collectFragment", ({ color }) => {
-    const player = players[socket.id];
-    if (!player) return;
+  socket.on("move", ({ x, y }) => {
+    const p = players[socket.id];
+    if (!p) return;
 
-    const question = getRandomQuestion(color, player.roomId);
+    p.x = x;
+    p.y = y;
 
-    io.to(socket.id).emit("question", {
-      color,
+    io.to(p.roomId).emit("state", { players, fragments });
+  });
+
+  // 🔥 TOUCH FRAGMENT → SEND QUESTION
+  socket.on("touchFragment", ({ fragmentId }) => {
+    const p = players[socket.id];
+    if (!p) return;
+
+    const frag = fragments.find(f => f.id === fragmentId);
+    if (!frag) return;
+
+    const question = getRandomQuestion(frag.color, p.roomId);
+
+    socket.emit("question", {
+      fragmentId,
       question
     });
   });
 
-  socket.on("answer", ({ correct }) => {
-    const player = players[socket.id];
-    if (!player) return;
+  // 🔥 ANSWER RESULT
+  socket.on("answer", ({ fragmentId, correct }) => {
+    const p = players[socket.id];
+    if (!p) return;
 
     if (correct) {
-      player.fragments += 1;
+      p.fragments += 1;
+      fragments = fragments.filter(f => f.id !== fragmentId);
     }
 
-    io.to(player.roomId).emit("players", players);
+    io.to(p.roomId).emit("state", { players, fragments });
   });
 
   socket.on("disconnect", () => {
     delete players[socket.id];
-    io.emit("players", players);
+    io.emit("state", { players, fragments });
   });
 });
 
 server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+  console.log("Maze running on http://localhost:3000");
 });
