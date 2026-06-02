@@ -1,27 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>Maze Game V4</title>
+<title>Maze Game</title>
 <style>
-body{margin:0;overflow:hidden;background:black;font-family:Arial}
-
+body{margin:0;overflow:hidden;background:black;}
 #menu{
-position:absolute;top:40%;left:50%;
+position:absolute;
+top:40%;
+left:50%;
 transform:translate(-50%,-50%);
-background:#111;padding:20px;color:white;
-}
-
-#ui{position:absolute;top:10px;left:10px;color:white}
-
-#chat{
-position:absolute;bottom:10px;left:10px;
-width:200px;height:200px;
-overflow:auto;background:#111;color:white;
+background:#222;
+padding:20px;
+color:white;
 }
 </style>
 </head>
-
 <body>
 
 <div id="menu">
@@ -30,14 +23,7 @@ overflow:auto;background:#111;color:white;
 <button onclick="join()">Play</button>
 </div>
 
-<div id="ui">
-Fragments: <span id="f">0</span><br>
-Keys: <span id="k">0</span>
-</div>
-
 <canvas id="game"></canvas>
-
-<div id="chat"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
