@@ -10,7 +10,6 @@ const TILE = 30;
 
 let state = { players: {}, fragments: [], maze: [], exit: {} };
 
-// JOIN
 function join() {
   socket.emit("joinRoom", {
     name: document.getElementById("name").value,
@@ -20,12 +19,10 @@ function join() {
   document.getElementById("menu").style.display = "none";
 }
 
-// STATE UPDATE
 socket.on("state", (data) => {
   state = data;
 });
 
-// QUESTION
 socket.on("question", (data) => {
   const box = document.getElementById("questionBox");
   const q = document.getElementById("q");
@@ -54,7 +51,7 @@ socket.on("question", (data) => {
   });
 });
 
-// MOVEMENT + COLLISION CHECK
+// movement
 document.addEventListener("keydown", (e) => {
   const me = state.players[socket.id];
   if (!me) return;
@@ -69,7 +66,6 @@ document.addEventListener("keydown", (e) => {
 
   socket.emit("move", { x: nx, y: ny });
 
-  // fragment touch
   for (const f of state.fragments) {
     if (f.x === nx && f.y === ny) {
       socket.emit("touchFragment", { fragmentId: f.id });
@@ -77,42 +73,34 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ===================== DRAW MAZE =====================
+// ===================== DRAW =====================
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // SAFETY CHECK (prevents blank crash)
-  if (!state.maze) {
-    requestAnimationFrame(draw);
-    return;
-  }
-
-  // DRAW MAZE WALLS
-  for (let y = 0; y < state.maze.length; y++) {
-    for (let x = 0; x < state.maze[y].length; x++) {
-      if (state.maze[y][x] === 1) {
-        ctx.fillStyle = "#333";
-        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+  if (state.maze) {
+    for (let y = 0; y < state.maze.length; y++) {
+      for (let x = 0; x < state.maze[y].length; x++) {
+        if (state.maze[y][x] === 1) {
+          ctx.fillStyle = "#333";
+          ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        }
       }
     }
   }
 
-  // FRAGMENTS
   for (const f of state.fragments) {
     ctx.fillStyle = "yellow";
     ctx.fillRect(f.x * TILE, f.y * TILE, TILE / 2, TILE / 2);
   }
 
-  // EXIT
   if (state.exit) {
     ctx.fillStyle = state.exit.unlocked ? "lime" : "red";
     ctx.fillRect(state.exit.x * TILE, state.exit.y * TILE, TILE, TILE);
   }
 
-  // PLAYERS
   for (const id in state.players) {
     const p = state.players[id];
 
