@@ -103,4 +103,4 @@ cs: [
 
 };
 
-module.exports = questionn
+module.exports = questions;
