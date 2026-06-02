@@ -10,18 +10,18 @@ canvas {
 
 #menu {
   position: absolute;
+  z-index: 10;
   top: 20px;
   left: 20px;
-  z-index: 10;
 }
 
 #questionBox {
   position: absolute;
+  z-index: 20;
   top: 50px;
   left: 50px;
   background: white;
   padding: 10px;
-  z-index: 20;
 }
 
 .hidden {
