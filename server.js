@@ -9,6 +9,7 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 const SIZE = 35;
+
 const rooms = {};
 
 const ADMIN_NAME = "AAO (Albert Anyange Olang)";
@@ -17,6 +18,25 @@ const COLORS = [
 "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff",
 "#00ffff","#ff8800","#8800ff","#ffffff","#ff4444"
 ];
+
+// ---------------- QUESTIONS (SIMPLIFIED SAMPLE EXPANDABLE) ----------------
+const SUBJECTS = ["math","cs","english","bio","chem","physics","geo","econ","business","sociology"];
+
+function generateQuestions() {
+    const db = {};
+
+    for (let s of SUBJECTS) {
+        db[s] = [];
+        for (let i = 1; i <= 50; i++) {
+            db[s].push({
+                q: `${s.toUpperCase()} Question ${i}: What is ${i} + ${i}?`,
+                a: String(i + i)
+            });
+        }
+    }
+
+    return db;
+}
 
 // ---------------- MAZE ----------------
 function generateMaze(size) {
@@ -63,23 +83,24 @@ function openTile(maze) {
 function getRoom(id) {
     if (!rooms[id]) {
         const maze = generateMaze(SIZE);
+        const questions = generateQuestions();
 
         const items = [];
 
         for (let i = 0; i < 10; i++) {
             items.push({
-                id: "f" + i,
+                id: "f"+i,
                 type: "fragment",
+                subject: SUBJECTS[i],
                 color: COLORS[i],
-                pair: i,
                 ...openTile(maze)
             });
 
             items.push({
-                id: "k" + i,
+                id: "k"+i,
                 type: "key",
+                subject: SUBJECTS[i],
                 color: COLORS[i],
-                pair: i,
                 ...openTile(maze)
             });
         }
@@ -88,9 +109,10 @@ function getRoom(id) {
             maze,
             players: {},
             items,
-            leaderboard: [],
+            questions,
             startTime: Date.now(),
-            exit: openTile(maze)
+            exitUnlocked: false,
+            leaderboard: []
         };
     }
 
@@ -101,15 +123,12 @@ function getRoom(id) {
 io.on("connection", socket => {
 
     socket.on("join", ({ name, room }) => {
-        const r = getRoom(room);
 
+        const r = getRoom(room);
         socket.room = room;
         socket.join(room);
 
-        socket.startTime = Date.now();
-
-        // ADMIN
-        if (name.toLowerCase() === ADMIN_NAME.toLowerCase()) {
+        if (name.trim().toLowerCase() === ADMIN_NAME.toLowerCase()) {
             socket.isAdmin = true;
             socket.emit("admin", r);
             return;
@@ -119,6 +138,7 @@ io.on("connection", socket => {
             name,
             x: 1,
             y: 1,
+            frozenUntil: 0,
             fragments: [],
             keys: []
         };
@@ -126,7 +146,7 @@ io.on("connection", socket => {
         socket.emit("init", {
             maze: r.maze,
             items: r.items,
-            exit: r.exit,
+            startTime: r.startTime,
             id: socket.id
         });
 
@@ -141,6 +161,8 @@ io.on("connection", socket => {
         const p = r.players[socket.id];
         if (!p) return;
 
+        if (Date.now() < p.frozenUntil) return;
+
         if (r.maze[pos.y]?.[pos.x] === 0) {
             p.x = pos.x;
             p.y = pos.y;
@@ -149,24 +171,40 @@ io.on("connection", socket => {
         io.to(socket.room).emit("players", r.players);
     });
 
-    // COLLECT (quiz system placeholder safe)
-    socket.on("collect", id => {
+    // QUIZ BEFORE COLLECT
+    socket.on("quizAnswer", ({ itemId, answer }) => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
-        const index = r.items.findIndex(i => i.id === id);
-        if (!p || index === -1) return;
+        const item = r.items.find(i => i.id === itemId);
+        if (!p || !item) return;
 
-        const item = r.items[index];
+        const qList = r.questions[item.subject];
+        const q = qList[Math.floor(Math.random() * qList.length)];
 
-        if (item.type === "fragment") p.fragments.push(item.id);
-        else p.keys.push(item.id);
+        if (answer === q.a) {
+            if (item.type === "fragment") p.fragments.push(itemId);
+            else p.keys.push(itemId);
 
-        r.items.splice(index, 1);
+            r.items = r.items.filter(i => i.id !== itemId);
 
-        io.to(socket.room).emit("itemsUpdate", r.items);
-        socket.emit("playerUpdate", p);
+            io.to(socket.room).emit("itemsUpdate", r.items);
+            socket.emit("playerUpdate", p);
+
+            // check win
+            if (p.keys.length === 10 && p.fragments.length === 10) {
+                r.exitUnlocked = true;
+                io.to(socket.room).emit("exitUnlocked");
+            }
+        } else {
+            // penalty
+            p.x = 1;
+            p.y = 1;
+            p.frozenUntil = Date.now() + 2000;
+
+            socket.emit("penalty", "Wrong answer!");
+        }
     });
 
     // CHAT
@@ -180,15 +218,13 @@ io.on("connection", socket => {
         });
     });
 
-    // WIN
+    // SPEEDRUN END
     socket.on("win", () => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
-        if (!p) return;
-
-        const time = Date.now() - socket.startTime;
+        const time = Date.now() - r.startTime;
 
         r.leaderboard.push({ name: p.name, time });
         r.leaderboard.sort((a,b)=>a.time-b.time);
@@ -198,4 +234,4 @@ io.on("connection", socket => {
 
 });
 
-server.listen(process.env.PORT || 3000);
+server.listen(3000);
