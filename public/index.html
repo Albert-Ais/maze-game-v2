@@ -1,17 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Maze Game</title>
+<title>AAA Maze</title>
 <style>
-body{margin:0;overflow:hidden;background:black;}
+body{margin:0;overflow:hidden;background:#000;}
+
 #menu{
 position:absolute;
-top:40%;
-left:50%;
+top:40%;left:50%;
 transform:translate(-50%,-50%);
 background:#222;
 padding:20px;
 color:white;
+}
+
+#chat{
+position:absolute;
+bottom:10px;
+left:10px;
+width:250px;
+height:200px;
+overflow:auto;
+background:#111;
+color:white;
+font-size:12px;
+padding:5px;
 }
 </style>
 </head>
@@ -22,6 +35,8 @@ color:white;
 <input id="room" placeholder="Room"><br>
 <button onclick="join()">Play</button>
 </div>
+
+<div id="chat"></div>
 
 <canvas id="game"></canvas>
 
