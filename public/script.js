@@ -1,105 +1,129 @@
-console.log("✅ script.js loaded");
-
 const socket = io();
 
-console.log("🔌 socket created");
-
-// DOM check
 const canvas = document.getElementById("game");
-const ctx = canvas ? canvas.getContext("2d") : null;
+const ctx = canvas.getContext("2d");
 
-if (!canvas) {
-  console.error("❌ Canvas NOT FOUND (check index.html id='game')");
-} else {
-  console.log("🎮 Canvas found");
-}
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-if (canvas) {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
+const TILE = 30;
 
-// STATE
-let state = {
-  players: {},
-  fragments: []
-};
+let state = { players: {}, fragments: [], maze: [], exit: {} };
 
-// JOIN GAME
+// JOIN
 function join() {
-  const name = document.getElementById("name").value;
-  const room = document.getElementById("room").value;
-
-  console.log("🚀 join clicked", name, room);
-
   socket.emit("joinRoom", {
-    name,
-    roomId: room
+    name: document.getElementById("name").value,
+    roomId: document.getElementById("room").value
   });
 
   document.getElementById("menu").style.display = "none";
 }
 
-// SOCKET CONNECT
-socket.on("connect", () => {
-  console.log("🟢 Connected to server:", socket.id);
-});
-
-socket.on("disconnect", () => {
-  console.log("🔴 Disconnected from server");
-});
-
-// RECEIVE STATE
+// STATE UPDATE
 socket.on("state", (data) => {
-  console.log("📦 state received:", data);
-
   state = data;
 });
 
-// SIMPLE QUESTION TEST
+// QUESTION
 socket.on("question", (data) => {
-  console.log("❓ question received:", data);
+  const box = document.getElementById("questionBox");
+  const q = document.getElementById("q");
+  const opts = document.getElementById("opts");
 
-  alert(
-    data.question.q +
-    "\n\nOptions: " +
-    data.question.options.join(", ")
-  );
+  box.classList.remove("hidden");
 
-  socket.emit("answer", {
-    fragmentId: data.fragmentId,
-    correct: true
+  q.innerText = data.question.q;
+  opts.innerHTML = "";
+
+  data.question.options.forEach((o, i) => {
+    const btn = document.createElement("button");
+
+    btn.innerText = o;
+
+    btn.onclick = () => {
+      socket.emit("answer", {
+        fragmentId: data.fragmentId,
+        correct: i === data.question.answer
+      });
+
+      box.classList.add("hidden");
+    };
+
+    opts.appendChild(btn);
   });
 });
 
-// SIMPLE DRAW TEST (NO MAZE, JUST PROOF IT WORKS)
-function draw() {
-  if (!ctx) return;
+// MOVEMENT + COLLISION CHECK
+document.addEventListener("keydown", (e) => {
+  const me = state.players[socket.id];
+  if (!me) return;
 
+  let nx = me.x;
+  let ny = me.y;
+
+  if (e.key === "w") ny--;
+  if (e.key === "s") ny++;
+  if (e.key === "a") nx--;
+  if (e.key === "d") nx++;
+
+  socket.emit("move", { x: nx, y: ny });
+
+  // fragment touch
+  for (const f of state.fragments) {
+    if (f.x === nx && f.y === ny) {
+      socket.emit("touchFragment", { fragmentId: f.id });
+    }
+  }
+});
+
+// ===================== DRAW MAZE =====================
+function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "black";
+  ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "white";
-  ctx.font = "20px Arial";
+  // SAFETY CHECK (prevents blank crash)
+  if (!state.maze) {
+    requestAnimationFrame(draw);
+    return;
+  }
 
-  ctx.fillText("MAZE TEST MODE ACTIVE", 50, 50);
-  ctx.fillText("Players: " + Object.keys(state.players).length, 50, 80);
-  ctx.fillText("Fragments: " + state.fragments.length, 50, 110);
+  // DRAW MAZE WALLS
+  for (let y = 0; y < state.maze.length; y++) {
+    for (let x = 0; x < state.maze[y].length; x++) {
+      if (state.maze[y][x] === 1) {
+        ctx.fillStyle = "#333";
+        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      }
+    }
+  }
+
+  // FRAGMENTS
+  for (const f of state.fragments) {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(f.x * TILE, f.y * TILE, TILE / 2, TILE / 2);
+  }
+
+  // EXIT
+  if (state.exit) {
+    ctx.fillStyle = state.exit.unlocked ? "lime" : "red";
+    ctx.fillRect(state.exit.x * TILE, state.exit.y * TILE, TILE, TILE);
+  }
+
+  // PLAYERS
+  for (const id in state.players) {
+    const p = state.players[id];
+
+    ctx.fillStyle = "cyan";
+    ctx.fillRect(p.x * TILE, p.y * TILE, TILE, TILE);
+
+    ctx.fillStyle = "white";
+    ctx.fillText(p.name, p.x * TILE, p.y * TILE - 5);
+  }
 
   requestAnimationFrame(draw);
 }
 
 draw();
-
-// TEST KEY (forces fragment trigger)
-document.addEventListener("keydown", (e) => {
-  if (e.key === "f") {
-    console.log("⚡ test fragment trigger");
-
-    socket.emit("touchFragment", {
-      fragmentId: 1
-    });
-  }
-});
