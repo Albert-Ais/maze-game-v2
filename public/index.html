@@ -1,114 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8" />
-<title>Maze Multiplayer Pro</title>
-
-<style>
-body {
-    margin: 0;
-    overflow: hidden;
-    font-family: Arial;
-    background: black;
-}
-
-/* CANVAS */
-canvas {
-    display: block;
-}
-
-/* ================= LOBBY ================= */
-#menu {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%,-50%);
-    background: rgba(0,0,0,0.85);
-    padding: 20px;
-    border-radius: 10px;
-    color: white;
-    text-align: center;
-}
-
-#menu input {
-    display: block;
-    margin: 10px auto;
-    padding: 8px;
-    width: 200px;
-}
-
-#menu button {
-    padding: 10px 20px;
-    cursor: pointer;
-}
-
-/* ================= HUD ================= */
-#hud {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    color: white;
-    background: rgba(0,0,0,0.6);
-    padding: 10px;
-    border-radius: 8px;
-    width: 220px;
-}
-
-#state {
-    color: yellow;
-    margin-bottom: 5px;
-}
-
-/* ================= QUIZ ================= */
-#quizBox {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%,-50%);
-    background: #111;
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    display: none;
-    width: 280px;
-    text-align: center;
-}
-
-#options button {
-    display: block;
-    width: 100%;
-    margin-top: 5px;
-}
-</style>
-
+  <title>Maze Game</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-<!-- ================= LOBBY ================= -->
 <div id="menu">
-    <h2>Maze Game</h2>
-
-    <input id="name" placeholder="Enter Name" />
-    <input id="room" placeholder="Room ID" />
-
-    <button onclick="joinGame()">PLAY</button>
-
-    <p id="status"></p>
+  <input id="name" placeholder="Name">
+  <input id="room" placeholder="Room ID">
+  <button onclick="join()">Play</button>
 </div>
 
-<!-- ================= CANVAS ================= -->
 <canvas id="game"></canvas>
 
-<!-- ================= HUD ================= -->
-<div id="hud">
-    <div id="state">lobby</div>
-</div>
-
-<!-- ================= QUIZ ================= -->
-<div id="quizBox">
-    <div id="question"></div>
-    <div id="options"></div>
+<div id="questionBox" class="hidden">
+  <h3 id="qText"></h3>
+  <div id="options"></div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
