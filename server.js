@@ -62,22 +62,24 @@ function openTile(maze) {
 // ---------------- ROOM ----------------
 function getRoom(id) {
     if (!rooms[id]) {
-
         const maze = generateMaze(SIZE);
+
         const items = [];
 
         for (let i = 0; i < 10; i++) {
             items.push({
-                id: "f"+i,
+                id: "f" + i,
                 type: "fragment",
                 color: COLORS[i],
+                pair: i,
                 ...openTile(maze)
             });
 
             items.push({
-                id: "k"+i,
+                id: "k" + i,
                 type: "key",
                 color: COLORS[i],
+                pair: i,
                 ...openTile(maze)
             });
         }
@@ -87,7 +89,8 @@ function getRoom(id) {
             players: {},
             items,
             leaderboard: [],
-            startTime: Date.now()
+            startTime: Date.now(),
+            exit: openTile(maze)
         };
     }
 
@@ -98,12 +101,15 @@ function getRoom(id) {
 io.on("connection", socket => {
 
     socket.on("join", ({ name, room }) => {
-
         const r = getRoom(room);
+
         socket.room = room;
         socket.join(room);
 
-        if (name.trim().toLowerCase() === ADMIN_NAME.toLowerCase()) {
+        socket.startTime = Date.now();
+
+        // ADMIN
+        if (name.toLowerCase() === ADMIN_NAME.toLowerCase()) {
             socket.isAdmin = true;
             socket.emit("admin", r);
             return;
@@ -120,13 +126,14 @@ io.on("connection", socket => {
         socket.emit("init", {
             maze: r.maze,
             items: r.items,
+            exit: r.exit,
             id: socket.id
         });
 
         io.to(room).emit("players", r.players);
     });
 
-    // MOVE (safe collision)
+    // MOVE
     socket.on("move", pos => {
         const r = rooms[socket.room];
         if (!r) return;
@@ -142,20 +149,19 @@ io.on("connection", socket => {
         io.to(socket.room).emit("players", r.players);
     });
 
-    // COLLECT
+    // COLLECT (quiz system placeholder safe)
     socket.on("collect", id => {
         const r = rooms[socket.room];
         if (!r) return;
 
         const p = r.players[socket.id];
         const index = r.items.findIndex(i => i.id === id);
-
         if (!p || index === -1) return;
 
         const item = r.items[index];
 
-        if (item.type === "fragment") p.fragments.push(id);
-        else p.keys.push(id);
+        if (item.type === "fragment") p.fragments.push(item.id);
+        else p.keys.push(item.id);
 
         r.items.splice(index, 1);
 
@@ -182,7 +188,7 @@ io.on("connection", socket => {
         const p = r.players[socket.id];
         if (!p) return;
 
-        const time = Date.now() - r.startTime;
+        const time = Date.now() - socket.startTime;
 
         r.leaderboard.push({ name: p.name, time });
         r.leaderboard.sort((a,b)=>a.time-b.time);
