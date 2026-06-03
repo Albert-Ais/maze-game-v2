@@ -40,26 +40,11 @@ const colors = {
   sociology: "lime"
 };
 
-// ===================== JOIN =====================
-function join() {
-  socket.emit("joinRoom", {
-    name: document.getElementById("name").value,
-    roomId: document.getElementById("room").value
-  });
-
-  document.getElementById("menu").style.display = "none";
-}
-
 // ===================== SOCKET =====================
 socket.on("state", (data) => {
   state = data;
 });
 
-socket.on("win", (data) => {
-  alert("🏆 " + data.name + " escaped!");
-});
-
-// ===================== QUESTION UI =====================
 socket.on("question", (data) => {
   const box = document.getElementById("questionBox");
   const q = document.getElementById("q");
@@ -92,15 +77,15 @@ socket.on("question", (data) => {
 document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
 document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
 
-// ===================== MOVEMENT (FIXED GRID SAFE) =====================
-let lastMoveTime = 0;
+// ===================== MOVE =====================
+let lastMove = 0;
 
 function updateMovement() {
   const me = state.players[socket.id];
   if (!me) return;
 
   const now = performance.now();
-  if (now - lastMoveTime < 90) return; // prevents spam + jitter
+  if (now - lastMove < 90) return;
 
   let nx = me.x;
   let ny = me.y;
@@ -110,25 +95,23 @@ function updateMovement() {
   else if (keysPressed["a"]) nx--;
   else if (keysPressed["d"]) nx++;
 
-  // only move if direction changed
   if (nx !== me.x || ny !== me.y) {
     socket.emit("move", { x: nx, y: ny });
-    lastMoveTime = now;
+    lastMove = now;
   }
 }
 
-// ===================== SMOOTH PLAYER RENDER =====================
+// ===================== DRAW PLAYER =====================
 function drawPlayer(p) {
-  if (p.renderX === undefined) p.renderX = p.x;
-  if (p.renderY === undefined) p.renderY = p.y;
+  if (p.rx === undefined) p.rx = p.x;
+  if (p.ry === undefined) p.ry = p.y;
 
-  // smooth interpolation ONLY (safe)
-  p.renderX += (p.x - p.renderX) * 0.25;
-  p.renderY += (p.y - p.renderY) * 0.25;
+  p.rx += (p.x - p.rx) * 0.2;
+  p.ry += (p.y - p.ry) * 0.2;
 
   ctx.fillRect(
-    p.renderX * TILE - camX + (TILE - PLAYER_SIZE) / 2,
-    p.renderY * TILE - camY + (TILE - PLAYER_SIZE) / 2,
+    p.rx * TILE - camX + (TILE - PLAYER_SIZE) / 2,
+    p.ry * TILE - camY + (TILE - PLAYER_SIZE) / 2,
     PLAYER_SIZE,
     PLAYER_SIZE
   );
@@ -140,35 +123,25 @@ function draw() {
 
   const me = state.players[socket.id];
 
-  // ===================== CAMERA =====================
   if (me) {
-    const targetX = (me.renderX ?? me.x) * TILE;
-    const targetY = (me.renderY ?? me.y) * TILE;
-
-    camX += (targetX - camX - canvas.width / 2) * 0.12;
-    camY += (targetY - camY - canvas.height / 2) * 0.12;
+    camX += (me.x * TILE - camX - canvas.width / 2) * 0.12;
+    camY += (me.y * TILE - camY - canvas.height / 2) * 0.12;
   }
 
-  // ===================== BACKGROUND =====================
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ===================== MAZE =====================
+  // maze
   for (let y = 0; y < (state.maze || []).length; y++) {
     for (let x = 0; x < (state.maze[y] || []).length; x++) {
       if (state.maze[y][x] === 1) {
         ctx.fillStyle = "#2f2f2f";
-        ctx.fillRect(
-          x * TILE - camX,
-          y * TILE - camY,
-          TILE,
-          TILE
-        );
+        ctx.fillRect(x * TILE - camX, y * TILE - camY, TILE, TILE);
       }
     }
   }
 
-  // ===================== KEYS =====================
+  // keys
   for (const k of state.keys || []) {
     ctx.fillStyle = colors[k.subject] || "white";
     ctx.fillRect(
@@ -179,7 +152,7 @@ function draw() {
     );
   }
 
-  // ===================== FRAGMENTS =====================
+  // fragments
   for (const f of state.fragments || []) {
     ctx.fillStyle = colors[f.subject] || "yellow";
     ctx.fillRect(
@@ -190,25 +163,14 @@ function draw() {
     );
   }
 
-  // ===================== EXIT =====================
-  if (state.exit) {
-    ctx.fillStyle = state.exit.unlocked ? "lime" : "red";
-    ctx.fillRect(
-      state.exit.x * TILE - camX,
-      state.exit.y * TILE - camY,
-      TILE,
-      TILE
-    );
-  }
-
-  // ===================== PLAYERS =====================
+  // players
   for (const id in state.players) {
     const p = state.players[id];
     ctx.fillStyle = "cyan";
     drawPlayer(p);
   }
 
-  // ===================== HUD =====================
+  // HUD
   if (me) {
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
@@ -219,6 +181,6 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-// ===================== START =====================
+// ===================== LOOP =====================
 setInterval(updateMovement, 80);
 draw();

@@ -12,12 +12,6 @@ app.use(express.static("public"));
 
 initQuestions();
 
-// ===================== SUBJECTS =====================
-const SUBJECTS = [
-  "math","english","biology","chemistry","physics",
-  "economics","geography","business","computer_science","sociology"
-];
-
 // ===================== MAZE =====================
 const W = 25;
 const H = 25;
@@ -26,10 +20,8 @@ let maze = Array.from({ length: H }, () =>
   Array.from({ length: W }, () => 1)
 );
 
-// generate procedural maze
 function carve(x, y) {
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]]
-    .sort(() => Math.random() - 0.5);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
 
   maze[y][x] = 0;
 
@@ -46,17 +38,11 @@ function carve(x, y) {
 
 carve(1, 1);
 
-// ===================== HELPERS =====================
-function randomEmptyCell() {
-  let x, y;
-
-  do {
-    x = Math.floor(Math.random() * W);
-    y = Math.floor(Math.random() * H);
-  } while (maze[y][x] === 1);
-
-  return { x, y };
-}
+// ===================== SUBJECTS =====================
+const SUBJECTS = [
+  "math","english","biology","chemistry","physics",
+  "economics","geography","business","computer_science","sociology"
+];
 
 // ===================== PLAYERS =====================
 const players = {};
@@ -64,35 +50,50 @@ const players = {};
 // ===================== EXIT =====================
 let exit = { x: W - 2, y: H - 2, unlocked: false };
 
-// ===================== ITEM GENERATION =====================
-function createItems() {
-  const keys = [];
-  const fragments = [];
+// ===================== ITEMS (GLOBAL ROOM SAFE) =====================
+let keys = [];
+let fragments = [];
+
+function spawnItems() {
+  keys = [];
+  fragments = [];
 
   for (let i = 0; i < 10; i++) {
     const subject = SUBJECTS[i % SUBJECTS.length];
 
-    let kPos = randomEmptyCell();
-    let fPos = randomEmptyCell();
-
     keys.push({
       id: "k_" + i,
-      x: kPos.x,
-      y: kPos.y,
+      x: Math.floor(Math.random() * W),
+      y: Math.floor(Math.random() * H),
       subject,
       collected: false
     });
 
     fragments.push({
       id: "f_" + i,
-      x: fPos.x,
-      y: fPos.y,
+      x: Math.floor(Math.random() * W),
+      y: Math.floor(Math.random() * H),
       subject,
       collected: false
     });
   }
 
-  return { keys, fragments };
+  // avoid walls
+  keys = keys.filter(k => maze[k.y]?.[k.x] === 0);
+  fragments = fragments.filter(f => maze[f.y]?.[f.x] === 0);
+}
+
+spawnItems();
+
+// ===================== BROADCAST =====================
+function broadcast(roomId) {
+  io.to(roomId).emit("state", {
+    players,
+    maze,
+    exit,
+    keys,
+    fragments
+  });
 }
 
 // ===================== SOCKET =====================
@@ -101,28 +102,20 @@ io.on("connection", (socket) => {
   socket.on("joinRoom", ({ name, roomId }) => {
     socket.join(roomId);
 
-    const items = createItems(); // NEW RANDOM WORLD EACH JOIN
-
     players[socket.id] = {
       id: socket.id,
       name,
       roomId,
       x: 1,
       y: 1,
-
-      // smooth movement support
-      renderX: 1,
-      renderY: 1,
-
       keys: 0,
-      fragments: 0,
-      items
+      fragments: 0
     };
 
     broadcast(roomId);
   });
 
-  // ===================== MOVEMENT =====================
+  // ===================== MOVE =====================
   socket.on("move", ({ x, y }) => {
     const p = players[socket.id];
     if (!p) return;
@@ -132,22 +125,28 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    const allItems = [...p.items.keys, ...p.items.fragments];
-
-    for (const item of allItems) {
-      if (!item.collected && item.x === x && item.y === y) {
-
-        const question = getRandomQuestion(item.subject);
-
+    // check keys
+    for (const k of keys) {
+      if (!k.collected && k.x === x && k.y === y) {
         socket.emit("question", {
-          type: item.id.startsWith("k_") ? "key" : "fragment",
-          id: item.id,
-          question
+          type: "key",
+          id: k.id,
+          question: getRandomQuestion(k.subject)
         });
       }
     }
 
-    checkWin(p);
+    // check fragments
+    for (const f of fragments) {
+      if (!f.collected && f.x === x && f.y === y) {
+        socket.emit("question", {
+          type: "fragment",
+          id: f.id,
+          question: getRandomQuestion(f.subject)
+        });
+      }
+    }
+
     broadcast(p.roomId);
   });
 
@@ -156,9 +155,9 @@ io.on("connection", (socket) => {
     const p = players[socket.id];
     if (!p) return;
 
-    const list = type === "key" ? p.items.keys : p.items.fragments;
-
+    const list = type === "key" ? keys : fragments;
     const item = list.find(i => i.id === id);
+
     if (!item || item.collected) return;
 
     if (correct) {
@@ -168,40 +167,15 @@ io.on("connection", (socket) => {
       if (type === "fragment") p.fragments++;
     }
 
-    checkWin(p);
     broadcast(p.roomId);
   });
 
+  // ===================== WIN =====================
   socket.on("disconnect", () => {
     delete players[socket.id];
-    io.emit("state", { players, maze, exit });
   });
 });
 
-// ===================== WIN CHECK =====================
-function checkWin(p) {
-  const allKeys = p.items.keys.every(k => k.collected);
-  const allFragments = p.items.fragments.every(f => f.collected);
-
-  if (allKeys && allFragments) {
-    exit.unlocked = true;
-  }
-
-  if (p.x === exit.x && p.y === exit.y && exit.unlocked) {
-    io.to(p.roomId).emit("win", { name: p.name });
-  }
-}
-
-// ===================== BROADCAST =====================
-function broadcast(roomId) {
-  io.to(roomId).emit("state", {
-    players,
-    maze,
-    exit
-  });
-}
-
-// ===================== START =====================
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
