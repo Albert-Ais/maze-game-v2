@@ -10,6 +10,10 @@ canvas.height = window.innerHeight;
 const TILE = 48;
 const PLAYER_SIZE = 18;
 
+// movement tuning (AAA feel)
+const INPUT_RATE = 60;
+const SMOOTH = 0.18;
+
 // ===================== STATE =====================
 let state = {
   players: {},
@@ -21,6 +25,9 @@ let state = {
 
 // ===================== INPUT =====================
 const keysPressed = {};
+
+let inputX = 0;
+let inputY = 0;
 
 // ===================== CAMERA =====================
 let camX = 0;
@@ -89,47 +96,55 @@ socket.on("question", (data) => {
 });
 
 // ===================== INPUT =====================
-document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
-document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
+document.addEventListener("keydown", (e) => {
+  keysPressed[e.key] = true;
+});
 
-// ===================== MOVEMENT (FIXED) =====================
-let lastSentX = null;
-let lastSentY = null;
-let moveCooldown = false;
+document.addEventListener("keyup", (e) => {
+  keysPressed[e.key] = false;
+});
+
+// ===================== INPUT UPDATE =====================
+function updateInput() {
+  inputX = 0;
+  inputY = 0;
+
+  if (keysPressed["w"]) inputY -= 1;
+  if (keysPressed["s"]) inputY += 1;
+  if (keysPressed["a"]) inputX -= 1;
+  if (keysPressed["d"]) inputX += 1;
+}
+
+// ===================== MOVEMENT (SMOOTH + CONTROLLED) =====================
+let lastSendTime = 0;
 
 function updateMovement() {
   const me = state.players[socket.id];
   if (!me) return;
 
-  if (moveCooldown) return;
+  updateInput();
 
-  let nx = me.x;
-  let ny = me.y;
+  const now = performance.now();
 
-  if (keysPressed["w"]) ny--;
-  if (keysPressed["s"]) ny++;
-  if (keysPressed["a"]) nx--;
-  if (keysPressed["d"]) nx++;
+  if (now - lastSendTime < INPUT_RATE) return;
 
-  // prevent spam + rubber-banding
-  if (nx === lastSentX && ny === lastSentY) return;
+  if (inputX === 0 && inputY === 0) return;
+
+  const nx = me.x + inputX;
+  const ny = me.y + inputY;
 
   socket.emit("move", { x: nx, y: ny });
 
-  lastSentX = nx;
-  lastSentY = ny;
-
-  moveCooldown = true;
-  setTimeout(() => moveCooldown = false, 70);
+  lastSendTime = now;
 }
 
-// ===================== DRAW PLAYER (SMOOTH) =====================
+// ===================== SMOOTH PLAYER RENDER =====================
 function drawPlayer(p) {
   if (p.renderX === undefined) p.renderX = p.x;
   if (p.renderY === undefined) p.renderY = p.y;
 
-  p.renderX += (p.x - p.renderX) * 0.25;
-  p.renderY += (p.y - p.renderY) * 0.25;
+  p.renderX += (p.x - p.renderX) * SMOOTH;
+  p.renderY += (p.y - p.renderY) * SMOOTH;
 
   ctx.fillRect(
     p.renderX * TILE - camX + (TILE - PLAYER_SIZE) / 2,
@@ -139,23 +154,26 @@ function drawPlayer(p) {
   );
 }
 
-// ===================== DRAW =====================
+// ===================== DRAW LOOP =====================
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const me = state.players[socket.id];
 
-  // camera follow
+  // ===================== CAMERA FOLLOW =====================
   if (me) {
-    camX += (me.x * TILE - camX - canvas.width / 2) * 0.15;
-    camY += (me.y * TILE - camY - canvas.height / 2) * 0.15;
+    const tx = (me.renderX ?? me.x) * TILE;
+    const ty = (me.renderY ?? me.y) * TILE;
+
+    camX += (tx - camX - canvas.width / 2) * 0.12;
+    camY += (ty - camY - canvas.height / 2) * 0.12;
   }
 
-  // background
+  // ===================== BACKGROUND =====================
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // maze
+  // ===================== MAZE =====================
   for (let y = 0; y < (state.maze || []).length; y++) {
     for (let x = 0; x < (state.maze[y] || []).length; x++) {
       if (state.maze[y][x] === 1) {
@@ -170,7 +188,7 @@ function draw() {
     }
   }
 
-  // keys
+  // ===================== KEYS =====================
   for (const k of state.keys || []) {
     ctx.fillStyle = colors[k.subject] || "white";
     ctx.fillRect(
@@ -181,7 +199,7 @@ function draw() {
     );
   }
 
-  // fragments
+  // ===================== FRAGMENTS =====================
   for (const f of state.fragments || []) {
     ctx.fillStyle = colors[f.subject] || "yellow";
     ctx.fillRect(
@@ -192,7 +210,7 @@ function draw() {
     );
   }
 
-  // exit
+  // ===================== EXIT =====================
   if (state.exit) {
     ctx.fillStyle = state.exit.unlocked ? "lime" : "red";
     ctx.fillRect(
@@ -203,7 +221,7 @@ function draw() {
     );
   }
 
-  // players
+  // ===================== PLAYERS =====================
   for (const id in state.players) {
     const p = state.players[id];
 
@@ -211,10 +229,11 @@ function draw() {
     drawPlayer(p);
   }
 
-  // HUD
+  // ===================== HUD =====================
   if (me) {
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
+
     ctx.fillText(`Keys: ${me.keys}/10`, 20, 30);
     ctx.fillText(`Fragments: ${me.fragments}/10`, 20, 60);
   }
@@ -223,5 +242,5 @@ function draw() {
 }
 
 // ===================== START =====================
-setInterval(updateMovement, 80);
+setInterval(updateMovement, 16);
 draw();
