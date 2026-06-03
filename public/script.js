@@ -12,8 +12,16 @@ const keysPressed = {};
 let camX = 0, camY = 0;
 
 // ================= INPUT =================
-addEventListener("keydown",e=>keysPressed[e.key.toLowerCase()]=true);
-addEventListener("keyup",e=>keysPressed[e.key.toLowerCase()]=false);
+addEventListener("keydown", e => {
+  keysPressed[e.key.toLowerCase()] = true;
+
+  const me = state.players[socket.id];
+  if (e.key.toLowerCase() === "r" && me) {
+    socket.emit("regenMaze", me.roomId);
+  }
+});
+
+addEventListener("keyup", e => keysPressed[e.key.toLowerCase()] = false);
 
 // ================= JOIN =================
 window.join = () => {
@@ -25,8 +33,27 @@ window.join = () => {
   startScreen.style.display = "none";
 };
 
-// ================= SOCKET =================
+// ================= STATE =================
 socket.on("state", d => state = d);
+
+// ================= REGEN EFFECT =================
+socket.on("mazeRegen", (d) => {
+  state.maze = d.maze;
+  state.keys = d.keys;
+  state.fragments = d.fragments;
+  state.exit = d.exit;
+
+  document.body.style.filter = "brightness(2)";
+  setTimeout(() => document.body.style.filter = "brightness(1)", 200);
+});
+
+// ================= SYSTEM MESSAGE =================
+socket.on("systemMessage", (d) => {
+  systemMessage.innerText = d.text;
+  systemMessage.style.opacity = 1;
+
+  setTimeout(() => systemMessage.style.opacity = 0, 1500);
+});
 
 // ================= QUIZ =================
 socket.on("question", d => {
@@ -38,10 +65,11 @@ socket.on("question", d => {
 
   d.question.options.forEach((o,i)=>{
     const b=document.createElement("button");
-    b.innerText=o;
 
+    b.innerText=o;
     b.onclick=()=>{
-      socket.emit("answer",{
+
+      socket.emit("answer", {
         type:d.type,
         id:d.id,
         correct:i===d.question.answer
@@ -56,13 +84,13 @@ socket.on("question", d => {
 });
 
 // ================= MOVEMENT =================
-let lastMove = 0;
+let last = 0;
 
 function update(){
   const me = state.players[socket.id];
   if(!me) return;
 
-  if(performance.now()-lastMove<60) return;
+  if(performance.now()-last<60) return;
 
   let x=me.x,y=me.y;
 
@@ -73,13 +101,12 @@ function update(){
 
   if(x!==me.x||y!==me.y){
     socket.emit("move",{x,y});
-    lastMove = performance.now();
+    last = performance.now();
   }
 }
 
 // ================= DRAW =================
 function draw(){
-
   ctx.fillStyle="#050505";
   ctx.fillRect(0,0,innerWidth,innerHeight);
 

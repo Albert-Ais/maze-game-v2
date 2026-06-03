@@ -1,23 +1,141 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Maze Game</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AAA Maze Game</title>
+
+<style>
+  body{
+    margin:0;
+    overflow:hidden;
+    background:#000;
+    font-family:Arial, sans-serif;
+  }
+
+  canvas{
+    display:block;
+  }
+
+  /* ================= START SCREEN ================= */
+  #startScreen{
+    position:absolute;
+    inset:0;
+    background:#000;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    color:white;
+  }
+
+  #startScreen input{
+    padding:10px;
+    width:200px;
+    border:none;
+    outline:none;
+  }
+
+  #startScreen button{
+    padding:10px 20px;
+    background:cyan;
+    border:none;
+    cursor:pointer;
+    font-weight:bold;
+  }
+
+  /* ================= SYSTEM MESSAGE ================= */
+  #systemMessage{
+    position:absolute;
+    top:20px;
+    left:50%;
+    transform:translateX(-50%);
+    color:cyan;
+    font-size:22px;
+    opacity:0;
+    transition:0.3s;
+    pointer-events:none;
+  }
+
+  /* ================= QUIZ OVERLAY ================= */
+  #quizOverlay{
+    position:absolute;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    opacity:0;
+    pointer-events:none;
+    transition:0.25s;
+  }
+
+  #quizOverlay.show{
+    opacity:1;
+  }
+
+  /* ================= QUIZ BOX ================= */
+  #questionBox{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%) scale(0.8);
+    width:420px;
+    padding:20px;
+    background:rgba(0,0,0,0.9);
+    border:2px solid cyan;
+    border-radius:12px;
+    color:white;
+    opacity:0;
+    transition:0.25s;
+  }
+
+  #questionBox.show{
+    opacity:1;
+    transform:translate(-50%,-50%) scale(1);
+  }
+
+  #opts button{
+    display:block;
+    width:100%;
+    margin-top:8px;
+    padding:10px;
+    background:#111;
+    border:1px solid cyan;
+    color:white;
+    cursor:pointer;
+  }
+
+  #opts button:hover{
+    background:cyan;
+    color:black;
+  }
+</style>
 </head>
+
 <body>
 
-<div id="menu">
-  <input id="name" placeholder="Name">
-  <input id="room" placeholder="Room">
-  <button onclick="join()">Play</button>
+<canvas id="game"></canvas>
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <h1>AAA MAZE GAME</h1>
+  <input id="name" placeholder="Enter name"/>
+  <input id="room" placeholder="Room ID"/>
+  <button onclick="join()">PLAY</button>
+  <p>Press R in-game to regenerate world</p>
 </div>
 
-<div id="questionBox" class="hidden">
+<!-- SYSTEM MESSAGE -->
+<div id="systemMessage"></div>
+
+<!-- QUIZ -->
+<div id="quizOverlay"></div>
+
+<div id="questionBox">
   <h3 id="q"></h3>
   <div id="opts"></div>
 </div>
 
-<canvas id="game"></canvas>
-
+<!-- SOCKET.IO -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 

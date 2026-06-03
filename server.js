@@ -12,14 +12,8 @@ app.use(express.static("public"));
 
 initQuestions();
 
-// ===================== WORLD =====================
 const W = 25;
 const H = 25;
-
-const SUBJECTS = [
-  "math","english","biology","chemistry","physics",
-  "economics","geography","business","computer_science","sociology"
-];
 
 let maze = [];
 let players = {};
@@ -62,7 +56,6 @@ function emptyTile() {
     x = Math.floor(Math.random() * W);
     y = Math.floor(Math.random() * H);
   } while (!maze[y] || maze[y][x] === 1);
-
   return { x, y };
 }
 
@@ -72,38 +65,29 @@ function spawn() {
   fragments = [];
 
   for (let i = 0; i < 10; i++) {
-    keys.push({
-      id: "k" + i,
-      ...emptyTile(),
-      subject: SUBJECTS[i],
-      collected: false
-    });
-
-    fragments.push({
-      id: "f" + i,
-      ...emptyTile(),
-      subject: SUBJECTS[i],
-      collected: false
-    });
+    keys.push({ id: "k"+i, ...emptyTile(), subject:"math", collected:false });
+    fragments.push({ id: "f"+i, ...emptyTile(), subject:"science", collected:false });
   }
 
-  exit = { ...emptyTile(), unlocked: false };
+  exit = emptyTile();
+  exit.unlocked = false;
 }
 
-function reset() {
+// ===================== RESET WORLD =====================
+function resetWorld() {
   generateMaze();
   spawn();
 }
 
-reset();
+resetWorld();
 
-// ===================== UTIL =====================
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+// ===================== DIST =====================
+function dist(a,b){
+  return Math.hypot(a.x-b.x,a.y-b.y);
 }
 
 // ===================== BROADCAST =====================
-function send(room) {
+function send(room){
   io.to(room).emit("state", {
     players,
     maze,
@@ -113,18 +97,18 @@ function send(room) {
   });
 }
 
-// ===================== PICKUP (100% RELIABLE) =====================
-function tryPickup(socket, p) {
+// ===================== PICKUP =====================
+function checkPickup(socket, p) {
   if (activeQuiz[socket.id]) return;
 
   for (const f of fragments) {
-    if (!f.collected && dist(p, f) < 1.2) {
-      activeQuiz[socket.id] = { type: "fragment", id: f.id };
+    if (!f.collected && dist(p,f) < 1.2) {
+      activeQuiz[socket.id] = { type:"fragment", id:f.id };
 
       socket.emit("question", {
-        type: "fragment",
-        id: f.id,
-        question: getRandomQuestion(f.subject)
+        type:"fragment",
+        id:f.id,
+        question:getRandomQuestion("math")
       });
 
       return;
@@ -132,13 +116,13 @@ function tryPickup(socket, p) {
   }
 
   for (const k of keys) {
-    if (!k.collected && dist(p, k) < 1.2) {
-      activeQuiz[socket.id] = { type: "key", id: k.id };
+    if (!k.collected && dist(p,k) < 1.2) {
+      activeQuiz[socket.id] = { type:"key", id:k.id };
 
       socket.emit("question", {
-        type: "key",
-        id: k.id,
-        question: getRandomQuestion(k.subject)
+        type:"key",
+        id:k.id,
+        question:getRandomQuestion("math")
       });
 
       return;
@@ -174,8 +158,7 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    tryPickup(socket, p); // ALWAYS CHECK HERE
-
+    checkPickup(socket, p);
     send(p.roomId);
   });
 
@@ -188,7 +171,7 @@ io.on("connection", (socket) => {
 
     if (correct) {
       if (type === "fragment") {
-        const f = fragments.find(x => x.id === id);
+        const f = fragments.find(x=>x.id===id);
         if (f) {
           f.collected = true;
           p.fragments++;
@@ -196,7 +179,7 @@ io.on("connection", (socket) => {
       }
 
       if (type === "key") {
-        const k = keys.find(x => x.id === id);
+        const k = keys.find(x=>x.id===id);
         if (k) {
           k.collected = true;
           p.keys++;
@@ -208,6 +191,17 @@ io.on("connection", (socket) => {
     send(p.roomId);
   });
 
+  // 🌍 WOW MOMENT: regenerate maze
+  socket.on("regenMaze", (roomId) => {
+    resetWorld();
+
+    io.to(roomId).emit("mazeRegen", { maze, keys, fragments, exit });
+
+    io.to(roomId).emit("systemMessage", {
+      text: "🌍 WORLD REBUILT!"
+    });
+  });
+
   socket.on("disconnect", () => {
     delete players[socket.id];
     delete activeQuiz[socket.id];
@@ -215,6 +209,6 @@ io.on("connection", (socket) => {
 });
 
 // ===================== START =====================
-server.listen(process.env.PORT || 3000, () => {
-  console.log("RUNNING FIXED COLLECTION VERSION");
-});
+server.listen(3000, () =>
+  console.log("WOW MODE GAME RUNNING")
+);
