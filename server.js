@@ -12,156 +12,139 @@ app.use(express.static("public"));
 
 initQuestions();
 
-// ===================== MAZE =====================
+// ===================== WORLD =====================
 const W = 25;
 const H = 25;
 
-let maze = Array.from({ length: H }, () =>
-  Array.from({ length: W }, () => 1)
-);
+const SUBJECTS = [
+  "math","english","biology","chemistry","physics",
+  "economics","geography","business","computer_science","sociology"
+];
 
-function carve(x, y) {
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
+let maze, players = {}, keys = [], fragments = [], exit;
 
-  maze[y][x] = 0;
+// ===================== MAZE =====================
+function generateMaze() {
+  maze = Array.from({ length: H }, () =>
+    Array.from({ length: W }, () => 1)
+  );
 
-  for (const [dx, dy] of dirs) {
-    const nx = x + dx * 2;
-    const ny = y + dy * 2;
+  function carve(x, y) {
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
 
-    if (ny > 0 && ny < H && nx > 0 && nx < W && maze[ny][nx] === 1) {
-      maze[y + dy][x + dx] = 0;
-      carve(nx, ny);
+    maze[y][x] = 0;
+
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx * 2;
+      const ny = y + dy * 2;
+
+      if (maze[ny]?.[nx] === 1) {
+        maze[y + dy][x + dx] = 0;
+        carve(nx, ny);
+      }
     }
   }
+
+  carve(1,1);
 }
 
-carve(1, 1);
-
-// ===================== DATA =====================
-const players = {};
-const SUBJECTS = ["math","english","biology","chemistry","physics","economics","geography","business","computer_science","sociology"];
-
-let exit = { x: W - 2, y: H - 2, unlocked: false };
-
-let keys = [];
-let fragments = [];
+// ===================== SPAWN =====================
+function emptyTile() {
+  let x,y;
+  do {
+    x = Math.floor(Math.random()*W);
+    y = Math.floor(Math.random()*H);
+  } while (maze[y][x] === 1);
+  return {x,y};
+}
 
 function spawnItems() {
   keys = [];
   fragments = [];
 
-  for (let i = 0; i < 10; i++) {
-    const subject = SUBJECTS[i];
-
-    keys.push({
-      id: "k" + i,
-      x: Math.floor(Math.random() * W),
-      y: Math.floor(Math.random() * H),
-      subject,
-      collected: false
-    });
-
-    fragments.push({
-      id: "f" + i,
-      x: Math.floor(Math.random() * W),
-      y: Math.floor(Math.random() * H),
-      subject,
-      collected: false
-    });
+  for (let i=0;i<10;i++) {
+    keys.push({ id:"k"+i, ...emptyTile(), subject: SUBJECTS[i], collected:false });
+    fragments.push({ id:"f"+i, ...emptyTile(), subject: SUBJECTS[i], collected:false });
   }
-
-  keys = keys.filter(k => maze[k.y]?.[k.x] === 0);
-  fragments = fragments.filter(f => maze[f.y]?.[f.x] === 0);
 }
 
-spawnItems();
+function resetWorld() {
+  generateMaze();
+  spawnItems();
+  exit = { x:W-2, y:H-2, unlocked:false };
+}
+
+resetWorld();
+
+// ===================== BROADCAST =====================
+function broadcast(room) {
+  io.to(room).emit("state", { players, maze, keys, fragments, exit });
+}
 
 // ===================== PICKUP =====================
 function tryPickup(socket, p) {
   for (const f of fragments) {
-    if (!f.collected && f.x === p.x && f.y === p.y) {
+    if (!f.collected && f.x===p.x && f.y===p.y) {
       f.collected = true;
-      socket.emit("question", {
-        type: "fragment",
-        id: f.id,
-        question: getRandomQuestion(f.subject)
-      });
+      socket.emit("question",{type:"fragment",id:f.id,question:getRandomQuestion(f.subject)});
     }
   }
 
   for (const k of keys) {
-    if (!k.collected && k.x === p.x && k.y === p.y) {
+    if (!k.collected && k.x===p.x && k.y===p.y) {
       k.collected = true;
-      socket.emit("question", {
-        type: "key",
-        id: k.id,
-        question: getRandomQuestion(k.subject)
-      });
+      socket.emit("question",{type:"key",id:k.id,question:getRandomQuestion(k.subject)});
     }
   }
 }
 
-// ===================== BROADCAST =====================
-function broadcast(roomId) {
-  io.to(roomId).emit("state", {
-    players,
-    maze,
-    keys,
-    fragments,
-    exit
-  });
-}
-
 // ===================== SOCKET =====================
-io.on("connection", (socket) => {
+io.on("connection",(socket)=>{
 
-  socket.on("joinRoom", ({ name, roomId }) => {
+  socket.on("joinRoom",({name,roomId})=>{
     socket.join(roomId);
 
     players[socket.id] = {
-      id: socket.id,
+      id:socket.id,
       name,
       roomId,
-      x: 1,
-      y: 1,
-      keys: 0,
-      fragments: 0
+      x:1,
+      y:1,
+      keys:0,
+      fragments:0
     };
 
     tryPickup(socket, players[socket.id]);
     broadcast(roomId);
   });
 
-  socket.on("move", ({ x, y }) => {
+  socket.on("move",({x,y})=>{
     const p = players[socket.id];
-    if (!p) return;
+    if(!p) return;
 
-    if (maze[y]?.[x] === 1) return;
+    if(maze[y]?.[x]===1) return;
 
-    p.x = x;
-    p.y = y;
-
-    tryPickup(socket, p);
+    p.x=x; p.y=y;
+    tryPickup(socket,p);
 
     broadcast(p.roomId);
   });
 
-  socket.on("answer", ({ type, id, correct }) => {
+  socket.on("answer",({type,id,correct})=>{
     const p = players[socket.id];
-    if (!p) return;
+    if(!p) return;
 
-    if (correct) {
-      if (type === "key") p.keys++;
-      if (type === "fragment") p.fragments++;
+    if(correct){
+      if(type==="key") p.keys++;
+      else p.fragments++;
     }
 
     broadcast(p.roomId);
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect",()=>{
     delete players[socket.id];
   });
 });
 
-server.listen(3000, () => console.log("running"));
+server.listen(3000,()=>console.log("running"));
