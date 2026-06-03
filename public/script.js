@@ -6,10 +6,6 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// ===================== SETTINGS =====================
-const TILE = 48;
-const PLAYER_SIZE = 18;
-
 // ===================== STATE =====================
 let state = {
   players: {},
@@ -40,11 +36,30 @@ const colors = {
   sociology: "lime"
 };
 
+// ===================== PLAY BUTTON FIX =====================
+window.join = function () {
+  const name = document.getElementById("name")?.value;
+  const room = document.getElementById("room")?.value;
+
+  if (!name || !room) {
+    alert("Enter name + room ID");
+    return;
+  }
+
+  socket.emit("joinRoom", {
+    name,
+    roomId: room
+  });
+
+  document.getElementById("menu").style.display = "none";
+};
+
 // ===================== SOCKET =====================
 socket.on("state", (data) => {
   state = data;
 });
 
+// ===================== QUESTION UI =====================
 socket.on("question", (data) => {
   const box = document.getElementById("questionBox");
   const q = document.getElementById("q");
@@ -57,6 +72,7 @@ socket.on("question", (data) => {
 
   data.question.options.forEach((o, i) => {
     const btn = document.createElement("button");
+
     btn.innerText = o;
 
     btn.onclick = () => {
@@ -74,8 +90,8 @@ socket.on("question", (data) => {
 });
 
 // ===================== INPUT =====================
-document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
-document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
+document.addEventListener("keydown", (e) => keysPressed[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", (e) => keysPressed[e.key.toLowerCase()] = false);
 
 // ===================== MOVE =====================
 let lastMove = 0;
@@ -85,7 +101,7 @@ function updateMovement() {
   if (!me) return;
 
   const now = performance.now();
-  if (now - lastMove < 90) return;
+  if (now - lastMove < 80) return;
 
   let nx = me.x;
   let ny = me.y;
@@ -109,11 +125,12 @@ function drawPlayer(p) {
   p.rx += (p.x - p.rx) * 0.2;
   p.ry += (p.y - p.ry) * 0.2;
 
+  ctx.fillStyle = "cyan";
   ctx.fillRect(
-    p.rx * TILE - camX + (TILE - PLAYER_SIZE) / 2,
-    p.ry * TILE - camY + (TILE - PLAYER_SIZE) / 2,
-    PLAYER_SIZE,
-    PLAYER_SIZE
+    p.rx * 48 - camX + 15,
+    p.ry * 48 - camY + 15,
+    18,
+    18
   );
 }
 
@@ -124,19 +141,19 @@ function draw() {
   const me = state.players[socket.id];
 
   if (me) {
-    camX += (me.x * TILE - camX - canvas.width / 2) * 0.12;
-    camY += (me.y * TILE - camY - canvas.height / 2) * 0.12;
+    camX += (me.x * 48 - camX - canvas.width / 2) * 0.12;
+    camY += (me.y * 48 - camY - canvas.height / 2) * 0.12;
   }
 
-  ctx.fillStyle = "#050505";
+  ctx.fillStyle = "#0a0a0a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // maze
   for (let y = 0; y < (state.maze || []).length; y++) {
     for (let x = 0; x < (state.maze[y] || []).length; x++) {
       if (state.maze[y][x] === 1) {
-        ctx.fillStyle = "#2f2f2f";
-        ctx.fillRect(x * TILE - camX, y * TILE - camY, TILE, TILE);
+        ctx.fillStyle = "#2b2b2b";
+        ctx.fillRect(x * 48 - camX, y * 48 - camY, 48, 48);
       }
     }
   }
@@ -144,30 +161,18 @@ function draw() {
   // keys
   for (const k of state.keys || []) {
     ctx.fillStyle = colors[k.subject] || "white";
-    ctx.fillRect(
-      k.x * TILE - camX + TILE * 0.3,
-      k.y * TILE - camY + TILE * 0.3,
-      TILE * 0.4,
-      TILE * 0.4
-    );
+    ctx.fillRect(k.x * 48 - camX + 18, k.y * 48 - camY + 18, 12, 12);
   }
 
   // fragments
   for (const f of state.fragments || []) {
     ctx.fillStyle = colors[f.subject] || "yellow";
-    ctx.fillRect(
-      f.x * TILE - camX + TILE * 0.25,
-      f.y * TILE - camY + TILE * 0.25,
-      TILE * 0.5,
-      TILE * 0.5
-    );
+    ctx.fillRect(f.x * 48 - camX + 16, f.y * 48 - camY + 16, 16, 16);
   }
 
   // players
   for (const id in state.players) {
-    const p = state.players[id];
-    ctx.fillStyle = "cyan";
-    drawPlayer(p);
+    drawPlayer(state.players[id]);
   }
 
   // HUD
@@ -175,12 +180,12 @@ function draw() {
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
     ctx.fillText(`Keys: ${me.keys}/10`, 20, 30);
-    ctx.fillText(`Fragments: ${me.fragments}/10`, 20, 60);
+    ctx.fillText(`Fragments: ${me.fragments}/10`, 20, 55);
   }
 
   requestAnimationFrame(draw);
 }
 
-// ===================== LOOP =====================
+// ===================== START =====================
 setInterval(updateMovement, 80);
 draw();

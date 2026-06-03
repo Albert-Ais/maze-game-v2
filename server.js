@@ -50,7 +50,7 @@ const players = {};
 // ===================== EXIT =====================
 let exit = { x: W - 2, y: H - 2, unlocked: false };
 
-// ===================== ITEMS (GLOBAL ROOM SAFE) =====================
+// ===================== ITEMS =====================
 let keys = [];
 let fragments = [];
 
@@ -59,10 +59,10 @@ function spawnItems() {
   fragments = [];
 
   for (let i = 0; i < 10; i++) {
-    const subject = SUBJECTS[i % SUBJECTS.length];
+    const subject = SUBJECTS[i];
 
     keys.push({
-      id: "k_" + i,
+      id: "k" + i,
       x: Math.floor(Math.random() * W),
       y: Math.floor(Math.random() * H),
       subject,
@@ -70,7 +70,7 @@ function spawnItems() {
     });
 
     fragments.push({
-      id: "f_" + i,
+      id: "f" + i,
       x: Math.floor(Math.random() * W),
       y: Math.floor(Math.random() * H),
       subject,
@@ -78,14 +78,14 @@ function spawnItems() {
     });
   }
 
-  // avoid walls
+  // ensure not in walls
   keys = keys.filter(k => maze[k.y]?.[k.x] === 0);
   fragments = fragments.filter(f => maze[f.y]?.[f.x] === 0);
 }
 
 spawnItems();
 
-// ===================== BROADCAST =====================
+// ===================== STATE SEND =====================
 function broadcast(roomId) {
   io.to(roomId).emit("state", {
     players,
@@ -115,7 +115,6 @@ io.on("connection", (socket) => {
     broadcast(roomId);
   });
 
-  // ===================== MOVE =====================
   socket.on("move", ({ x, y }) => {
     const p = players[socket.id];
     if (!p) return;
@@ -150,7 +149,6 @@ io.on("connection", (socket) => {
     broadcast(p.roomId);
   });
 
-  // ===================== ANSWER =====================
   socket.on("answer", ({ type, id, correct }) => {
     const p = players[socket.id];
     if (!p) return;
@@ -170,7 +168,6 @@ io.on("connection", (socket) => {
     broadcast(p.roomId);
   });
 
-  // ===================== WIN =====================
   socket.on("disconnect", () => {
     delete players[socket.id];
   });
