@@ -27,10 +27,9 @@ let keys = [];
 let fragments = [];
 let exit = null;
 
-// ===================== AAA SETTINGS =====================
-const PICKUP_RADIUS = 0.75;
+// ===================== SETTINGS =====================
+const PICKUP_RADIUS = 0.8;
 const activeQuiz = {};
-const cooldown = {};
 
 // ===================== MAZE =====================
 function generateMaze() {
@@ -58,7 +57,7 @@ function generateMaze() {
   carve(1, 1);
 }
 
-// ===================== SPAWN =====================
+// ===================== SAFE SPAWN =====================
 function emptyTile() {
   let x, y;
   do {
@@ -68,6 +67,7 @@ function emptyTile() {
   return { x, y };
 }
 
+// ===================== SPAWN ITEMS =====================
 function spawnItems() {
   keys = [];
   fragments = [];
@@ -89,34 +89,39 @@ function spawnItems() {
   }
 }
 
+// ===================== RESET =====================
 function resetWorld() {
   generateMaze();
   spawnItems();
 
-  exit = { x: W - 2, y: H - 2, unlocked: false };
+  exit = {
+    x: W - 2,
+    y: H - 2,
+    unlocked: false
+  };
 }
 
 resetWorld();
 
-// ===================== UTIL =====================
+// ===================== DISTANCE =====================
 function dist(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // ===================== PICKUP SYSTEM =====================
 function checkPickup(socket, p) {
   if (activeQuiz[socket.id]) return;
-  if (cooldown[socket.id] && Date.now() - cooldown[socket.id] < 300) return;
 
   for (const f of fragments) {
     if (!f.collected && dist(p, f) <= PICKUP_RADIUS) {
       activeQuiz[socket.id] = { type: "fragment", id: f.id };
+
       socket.emit("question", {
         type: "fragment",
         id: f.id,
         question: getRandomQuestion(f.subject)
       });
-      cooldown[socket.id] = Date.now();
+
       return;
     }
   }
@@ -124,12 +129,13 @@ function checkPickup(socket, p) {
   for (const k of keys) {
     if (!k.collected && dist(p, k) <= PICKUP_RADIUS) {
       activeQuiz[socket.id] = { type: "key", id: k.id };
+
       socket.emit("question", {
         type: "key",
         id: k.id,
         question: getRandomQuestion(k.subject)
       });
-      cooldown[socket.id] = Date.now();
+
       return;
     }
   }
@@ -162,7 +168,6 @@ io.on("connection", (socket) => {
       fragments: 0
     };
 
-    checkPickup(socket, players[socket.id]);
     broadcast(roomId);
   });
 
@@ -175,7 +180,6 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    checkPickup(socket, p);
     broadcast(p.roomId);
   });
 
@@ -211,11 +215,23 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     delete players[socket.id];
     delete activeQuiz[socket.id];
-    delete cooldown[socket.id];
   });
 });
 
+// ===================== 🔥 GAME LOOP (CRITICAL FIX) =====================
+// This guarantees pickup NEVER gets missed
+setInterval(() => {
+  for (const id in players) {
+    const p = players[id];
+    const socket = io.sockets.sockets.get(id);
+
+    if (p && socket) {
+      checkPickup(socket, p);
+    }
+  }
+}, 120);
+
 // ===================== START =====================
-server.listen(process.env.PORT || 3000, () =>
-  console.log("AAA Maze Game Running")
-);
+server.listen(process.env.PORT || 3000, () => {
+  console.log("AAA FINAL MAZE GAME RUNNING");
+});
