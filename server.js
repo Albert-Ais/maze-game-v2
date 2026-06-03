@@ -38,19 +38,12 @@ function carve(x, y) {
 
 carve(1, 1);
 
-// ===================== SUBJECTS =====================
-const SUBJECTS = [
-  "math","english","biology","chemistry","physics",
-  "economics","geography","business","computer_science","sociology"
-];
-
-// ===================== PLAYERS =====================
+// ===================== DATA =====================
 const players = {};
+const SUBJECTS = ["math","english","biology","chemistry","physics","economics","geography","business","computer_science","sociology"];
 
-// ===================== EXIT =====================
 let exit = { x: W - 2, y: H - 2, unlocked: false };
 
-// ===================== ITEMS =====================
 let keys = [];
 let fragments = [];
 
@@ -78,21 +71,45 @@ function spawnItems() {
     });
   }
 
-  // ensure not in walls
   keys = keys.filter(k => maze[k.y]?.[k.x] === 0);
   fragments = fragments.filter(f => maze[f.y]?.[f.x] === 0);
 }
 
 spawnItems();
 
-// ===================== STATE SEND =====================
+// ===================== PICKUP =====================
+function tryPickup(socket, p) {
+  for (const f of fragments) {
+    if (!f.collected && f.x === p.x && f.y === p.y) {
+      f.collected = true;
+      socket.emit("question", {
+        type: "fragment",
+        id: f.id,
+        question: getRandomQuestion(f.subject)
+      });
+    }
+  }
+
+  for (const k of keys) {
+    if (!k.collected && k.x === p.x && k.y === p.y) {
+      k.collected = true;
+      socket.emit("question", {
+        type: "key",
+        id: k.id,
+        question: getRandomQuestion(k.subject)
+      });
+    }
+  }
+}
+
+// ===================== BROADCAST =====================
 function broadcast(roomId) {
   io.to(roomId).emit("state", {
     players,
     maze,
-    exit,
     keys,
-    fragments
+    fragments,
+    exit
   });
 }
 
@@ -112,6 +129,7 @@ io.on("connection", (socket) => {
       fragments: 0
     };
 
+    tryPickup(socket, players[socket.id]);
     broadcast(roomId);
   });
 
@@ -124,27 +142,7 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    // check keys
-    for (const k of keys) {
-      if (!k.collected && k.x === x && k.y === y) {
-        socket.emit("question", {
-          type: "key",
-          id: k.id,
-          question: getRandomQuestion(k.subject)
-        });
-      }
-    }
-
-    // check fragments
-    for (const f of fragments) {
-      if (!f.collected && f.x === x && f.y === y) {
-        socket.emit("question", {
-          type: "fragment",
-          id: f.id,
-          question: getRandomQuestion(f.subject)
-        });
-      }
-    }
+    tryPickup(socket, p);
 
     broadcast(p.roomId);
   });
@@ -153,14 +151,7 @@ io.on("connection", (socket) => {
     const p = players[socket.id];
     if (!p) return;
 
-    const list = type === "key" ? keys : fragments;
-    const item = list.find(i => i.id === id);
-
-    if (!item || item.collected) return;
-
     if (correct) {
-      item.collected = true;
-
       if (type === "key") p.keys++;
       if (type === "fragment") p.fragments++;
     }
@@ -173,8 +164,4 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log("Maze running on port", PORT);
-});
+server.listen(3000, () => console.log("running"));

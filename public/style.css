@@ -2,28 +2,107 @@ body {
   margin: 0;
   overflow: hidden;
   background: black;
+  font-family: Arial, sans-serif;
 }
 
-canvas {
-  display: block;
-}
-
-#menu {
+/* ===================== OVERLAY ===================== */
+#quizOverlay {
   position: absolute;
-  z-index: 10;
-  top: 20px;
-  left: 20px;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(0,0,0,0.4), rgba(0,0,0,0.9));
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.25s ease;
+  backdrop-filter: blur(6px);
 }
 
+#quizOverlay.show {
+  opacity: 1;
+}
+
+/* ===================== QUIZ BOX ===================== */
 #questionBox {
   position: absolute;
-  z-index: 20;
-  top: 50px;
-  left: 50px;
-  background: white;
-  padding: 10px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.75);
+
+  width: 440px;
+  padding: 22px;
+
+  color: white;
+
+  background: linear-gradient(
+    145deg,
+    rgba(15, 15, 15, 0.95),
+    rgba(5, 5, 5, 0.95)
+  );
+
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  border-radius: 16px;
+
+  box-shadow:
+    0 0 25px rgba(0, 255, 255, 0.25),
+    inset 0 0 10px rgba(0, 255, 255, 0.08);
+
+  opacity: 0;
+  pointer-events: none;
+
+  transition: 0.28s cubic-bezier(0.2, 0.9, 0.2, 1);
+
+  backdrop-filter: blur(10px);
 }
 
-.hidden {
-  display: none;
+/* OPEN ANIMATION (AAA POP) */
+#questionBox.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+
+/* ===================== QUESTION TEXT ===================== */
+#q {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+
+  margin-bottom: 14px;
+
+  text-shadow: 0 0 12px rgba(0,255,255,0.25);
+}
+
+/* ===================== OPTIONS ===================== */
+#opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* BUTTON STYLE */
+#opts button {
+  padding: 10px 12px;
+
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  border-radius: 10px;
+
+  color: white;
+  cursor: pointer;
+
+  transition: 0.15s ease;
+
+  font-size: 14px;
+}
+
+/* HOVER (AAA FEEL) */
+#opts button:hover {
+  background: rgba(0, 255, 255, 0.12);
+  transform: scale(1.03);
+
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.25);
+}
+
+/* CLICK FEEDBACK */
+#opts button:active {
+  transform: scale(0.98);
 }
