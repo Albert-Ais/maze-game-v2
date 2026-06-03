@@ -10,10 +10,6 @@ canvas.height = window.innerHeight;
 const TILE = 48;
 const PLAYER_SIZE = 18;
 
-// movement tuning (AAA feel)
-const INPUT_RATE = 60;
-const SMOOTH = 0.18;
-
 // ===================== STATE =====================
 let state = {
   players: {},
@@ -25,9 +21,6 @@ let state = {
 
 // ===================== INPUT =====================
 const keysPressed = {};
-
-let inputX = 0;
-let inputY = 0;
 
 // ===================== CAMERA =====================
 let camX = 0;
@@ -96,46 +89,32 @@ socket.on("question", (data) => {
 });
 
 // ===================== INPUT =====================
-document.addEventListener("keydown", (e) => {
-  keysPressed[e.key] = true;
-});
+document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
+document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
 
-document.addEventListener("keyup", (e) => {
-  keysPressed[e.key] = false;
-});
-
-// ===================== INPUT UPDATE =====================
-function updateInput() {
-  inputX = 0;
-  inputY = 0;
-
-  if (keysPressed["w"]) inputY -= 1;
-  if (keysPressed["s"]) inputY += 1;
-  if (keysPressed["a"]) inputX -= 1;
-  if (keysPressed["d"]) inputX += 1;
-}
-
-// ===================== MOVEMENT (SMOOTH + CONTROLLED) =====================
-let lastSendTime = 0;
+// ===================== MOVEMENT (FIXED GRID SAFE) =====================
+let lastMoveTime = 0;
 
 function updateMovement() {
   const me = state.players[socket.id];
   if (!me) return;
 
-  updateInput();
-
   const now = performance.now();
+  if (now - lastMoveTime < 90) return; // prevents spam + jitter
 
-  if (now - lastSendTime < INPUT_RATE) return;
+  let nx = me.x;
+  let ny = me.y;
 
-  if (inputX === 0 && inputY === 0) return;
+  if (keysPressed["w"]) ny--;
+  else if (keysPressed["s"]) ny++;
+  else if (keysPressed["a"]) nx--;
+  else if (keysPressed["d"]) nx++;
 
-  const nx = me.x + inputX;
-  const ny = me.y + inputY;
-
-  socket.emit("move", { x: nx, y: ny });
-
-  lastSendTime = now;
+  // only move if direction changed
+  if (nx !== me.x || ny !== me.y) {
+    socket.emit("move", { x: nx, y: ny });
+    lastMoveTime = now;
+  }
 }
 
 // ===================== SMOOTH PLAYER RENDER =====================
@@ -143,8 +122,9 @@ function drawPlayer(p) {
   if (p.renderX === undefined) p.renderX = p.x;
   if (p.renderY === undefined) p.renderY = p.y;
 
-  p.renderX += (p.x - p.renderX) * SMOOTH;
-  p.renderY += (p.y - p.renderY) * SMOOTH;
+  // smooth interpolation ONLY (safe)
+  p.renderX += (p.x - p.renderX) * 0.25;
+  p.renderY += (p.y - p.renderY) * 0.25;
 
   ctx.fillRect(
     p.renderX * TILE - camX + (TILE - PLAYER_SIZE) / 2,
@@ -154,19 +134,19 @@ function drawPlayer(p) {
   );
 }
 
-// ===================== DRAW LOOP =====================
+// ===================== DRAW =====================
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const me = state.players[socket.id];
 
-  // ===================== CAMERA FOLLOW =====================
+  // ===================== CAMERA =====================
   if (me) {
-    const tx = (me.renderX ?? me.x) * TILE;
-    const ty = (me.renderY ?? me.y) * TILE;
+    const targetX = (me.renderX ?? me.x) * TILE;
+    const targetY = (me.renderY ?? me.y) * TILE;
 
-    camX += (tx - camX - canvas.width / 2) * 0.12;
-    camY += (ty - camY - canvas.height / 2) * 0.12;
+    camX += (targetX - camX - canvas.width / 2) * 0.12;
+    camY += (targetY - camY - canvas.height / 2) * 0.12;
   }
 
   // ===================== BACKGROUND =====================
@@ -224,7 +204,6 @@ function draw() {
   // ===================== PLAYERS =====================
   for (const id in state.players) {
     const p = state.players[id];
-
     ctx.fillStyle = "cyan";
     drawPlayer(p);
   }
@@ -233,7 +212,6 @@ function draw() {
   if (me) {
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
-
     ctx.fillText(`Keys: ${me.keys}/10`, 20, 30);
     ctx.fillText(`Fragments: ${me.fragments}/10`, 20, 60);
   }
@@ -242,5 +220,5 @@ function draw() {
 }
 
 // ===================== START =====================
-setInterval(updateMovement, 16);
+setInterval(updateMovement, 80);
 draw();
