@@ -12,6 +12,7 @@ app.use(express.static("public"));
 
 initQuestions();
 
+// ===================== WORLD =====================
 const W = 25;
 const H = 25;
 
@@ -24,8 +25,9 @@ let maze = [];
 let players = {};
 let keys = [];
 let fragments = [];
-let exit;
+let exit = null;
 
+// ===================== GENERATE MAZE =====================
 function generateMaze() {
   maze = Array.from({ length: H }, () =>
     Array.from({ length: W }, () => 1)
@@ -51,59 +53,98 @@ function generateMaze() {
   carve(1, 1);
 }
 
+// ===================== SAFE TILE =====================
 function emptyTile() {
   let x, y;
+
   do {
     x = Math.floor(Math.random() * W);
     y = Math.floor(Math.random() * H);
-  } while (maze[y][x] === 1);
+  } while (!maze[y] || maze[y][x] === 1);
+
   return { x, y };
 }
 
+// ===================== SPAWN ITEMS =====================
 function spawnItems() {
   keys = [];
   fragments = [];
 
   for (let i = 0; i < 10; i++) {
-    keys.push({ id: "k"+i, ...emptyTile(), subject: SUBJECTS[i], collected:false });
-    fragments.push({ id: "f"+i, ...emptyTile(), subject: SUBJECTS[i], collected:false });
+    keys.push({
+      id: "k" + i,
+      ...emptyTile(),
+      subject: SUBJECTS[i],
+      collected: false
+    });
+
+    fragments.push({
+      id: "f" + i,
+      ...emptyTile(),
+      subject: SUBJECTS[i],
+      collected: false
+    });
   }
 }
 
+// ===================== RESET WORLD =====================
 function resetWorld() {
   generateMaze();
   spawnItems();
-  exit = { x: W-2, y: H-2, unlocked:false };
+
+  exit = {
+    x: W - 2,
+    y: H - 2,
+    unlocked: false
+  };
 }
 
 resetWorld();
 
-function broadcast(room) {
-  io.to(room).emit("state", { players, maze, keys, fragments, exit });
+// ===================== BROADCAST =====================
+function broadcast(roomId) {
+  io.to(roomId).emit("state", {
+    players,
+    maze,
+    keys,
+    fragments,
+    exit
+  });
 }
 
-function tryPickup(socket, p) {
+// ===================== PICKUP SYSTEM (FIXED CORE) =====================
+function checkPickup(socket, player) {
+
+  // FRAGMENTS
   for (const f of fragments) {
-    if (!f.collected && f.x === p.x && f.y === p.y) {
+    if (!f.collected && f.x === player.x && f.y === player.y) {
+
       socket.emit("question", {
         type: "fragment",
         id: f.id,
         question: getRandomQuestion(f.subject)
       });
+
+      return; // IMPORTANT: prevent double trigger
     }
   }
 
+  // KEYS
   for (const k of keys) {
-    if (!k.collected && k.x === p.x && k.y === p.y) {
+    if (!k.collected && k.x === player.x && k.y === player.y) {
+
       socket.emit("question", {
         type: "key",
         id: k.id,
         question: getRandomQuestion(k.subject)
       });
+
+      return;
     }
   }
 }
 
+// ===================== SOCKET =====================
 io.on("connection", (socket) => {
 
   socket.on("joinRoom", ({ name, roomId }) => {
@@ -119,7 +160,7 @@ io.on("connection", (socket) => {
       fragments: 0
     };
 
-    tryPickup(socket, players[socket.id]);
+    checkPickup(socket, players[socket.id]);
     broadcast(roomId);
   });
 
@@ -132,7 +173,9 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    tryPickup(socket, p);
+    // ✅ ALWAYS SERVER-SIDE PICKUP CHECK
+    checkPickup(socket, p);
+
     broadcast(p.roomId);
   });
 
@@ -141,8 +184,21 @@ io.on("connection", (socket) => {
     if (!p) return;
 
     if (correct) {
-      if (type === "key") p.keys++;
-      if (type === "fragment") p.fragments++;
+      if (type === "fragment") {
+        const f = fragments.find(x => x.id === id);
+        if (f && !f.collected) {
+          f.collected = true;
+          p.fragments++;
+        }
+      }
+
+      if (type === "key") {
+        const k = keys.find(x => x.id === id);
+        if (k && !k.collected) {
+          k.collected = true;
+          p.keys++;
+        }
+      }
     }
 
     broadcast(p.roomId);
@@ -153,4 +209,7 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(3000, () => console.log("Maze ready"));
+// ===================== START =====================
+server.listen(process.env.PORT || 3000, () => {
+  console.log("Maze running");
+});
