@@ -14,16 +14,8 @@ initQuestions();
 
 // ===================== SUBJECTS =====================
 const SUBJECTS = [
-  "math",
-  "english",
-  "biology",
-  "chemistry",
-  "physics",
-  "economics",
-  "geography",
-  "business",
-  "computer_science",
-  "sociology"
+  "math","english","biology","chemistry","physics",
+  "economics","geography","business","computer_science","sociology"
 ];
 
 // ===================== MAZE =====================
@@ -34,8 +26,10 @@ let maze = Array.from({ length: H }, () =>
   Array.from({ length: W }, () => 1)
 );
 
+// generate procedural maze
 function carve(x, y) {
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]]
+    .sort(() => Math.random() - 0.5);
 
   maze[y][x] = 0;
 
@@ -52,8 +46,8 @@ function carve(x, y) {
 
 carve(1, 1);
 
-// ===================== SAFE SPAWN =====================
-function getRandomEmptyCell() {
+// ===================== HELPERS =====================
+function randomEmptyCell() {
   let x, y;
 
   do {
@@ -64,51 +58,50 @@ function getRandomEmptyCell() {
   return { x, y };
 }
 
-// ===================== GAME STATE =====================
+// ===================== PLAYERS =====================
 const players = {};
-
-// 🔥 anti-exploit lock system
-const activeLocks = {};
-
-// ===================== KEYS + FRAGMENTS =====================
-let keys = [];
-let fragments = [];
-
-for (const subject of SUBJECTS) {
-  const k = getRandomEmptyCell();
-  const f = getRandomEmptyCell();
-
-  keys.push({
-    id: "k_" + subject,
-    subject,
-    x: k.x,
-    y: k.y
-  });
-
-  fragments.push({
-    id: "f_" + subject,
-    subject,
-    x: f.x,
-    y: f.y
-  });
-}
 
 // ===================== EXIT =====================
 let exit = { x: W - 2, y: H - 2, unlocked: false };
 
-// ===================== CHECK WIN CONDITION =====================
-function checkUnlock() {
-  if (keys.length === 0 && fragments.length === 0) {
-    exit.unlocked = true;
+// ===================== ITEM GENERATION =====================
+function createItems() {
+  const keys = [];
+  const fragments = [];
+
+  for (let i = 0; i < 10; i++) {
+    const subject = SUBJECTS[i % SUBJECTS.length];
+
+    let kPos = randomEmptyCell();
+    let fPos = randomEmptyCell();
+
+    keys.push({
+      id: "k_" + i,
+      x: kPos.x,
+      y: kPos.y,
+      subject,
+      collected: false
+    });
+
+    fragments.push({
+      id: "f_" + i,
+      x: fPos.x,
+      y: fPos.y,
+      subject,
+      collected: false
+    });
   }
+
+  return { keys, fragments };
 }
 
 // ===================== SOCKET =====================
 io.on("connection", (socket) => {
 
-  // ===================== JOIN =====================
   socket.on("joinRoom", ({ name, roomId }) => {
     socket.join(roomId);
+
+    const items = createItems(); // NEW RANDOM WORLD EACH JOIN
 
     players[socket.id] = {
       id: socket.id,
@@ -116,16 +109,20 @@ io.on("connection", (socket) => {
       roomId,
       x: 1,
       y: 1,
-      keys: 0,
-      fragments: 0
-    };
 
-    activeLocks[socket.id] = new Set();
+      // smooth movement support
+      renderX: 1,
+      renderY: 1,
+
+      keys: 0,
+      fragments: 0,
+      items
+    };
 
     broadcast(roomId);
   });
 
-  // ===================== MOVE =====================
+  // ===================== MOVEMENT =====================
   socket.on("move", ({ x, y }) => {
     const p = players[socket.id];
     if (!p) return;
@@ -135,52 +132,23 @@ io.on("connection", (socket) => {
     p.x = x;
     p.y = y;
 
-    if (p.x === exit.x && p.y === exit.y && exit.unlocked) {
-      io.to(p.roomId).emit("win", { name: p.name });
+    const allItems = [...p.items.keys, ...p.items.fragments];
+
+    for (const item of allItems) {
+      if (!item.collected && item.x === x && item.y === y) {
+
+        const question = getRandomQuestion(item.subject);
+
+        socket.emit("question", {
+          type: item.id.startsWith("k_") ? "key" : "fragment",
+          id: item.id,
+          question
+        });
+      }
     }
 
+    checkWin(p);
     broadcast(p.roomId);
-  });
-
-  // ===================== TOUCH FRAGMENT =====================
-  socket.on("touchFragment", ({ fragmentId }) => {
-    const p = players[socket.id];
-    const f = fragments.find(x => x.id === fragmentId);
-
-    if (!p || !f) return;
-
-    // 🚫 anti spam / farming
-    if (activeLocks[socket.id].has(fragmentId)) return;
-
-    activeLocks[socket.id].add(fragmentId);
-
-    const question = getRandomQuestion(f.subject);
-
-    socket.emit("question", {
-      type: "fragment",
-      id: fragmentId,
-      question
-    });
-  });
-
-  // ===================== TOUCH KEY =====================
-  socket.on("touchKey", ({ keyId }) => {
-    const p = players[socket.id];
-    const k = keys.find(x => x.id === keyId);
-
-    if (!p || !k) return;
-
-    if (activeLocks[socket.id].has(keyId)) return;
-
-    activeLocks[socket.id].add(keyId);
-
-    const question = getRandomQuestion(k.subject);
-
-    socket.emit("question", {
-      type: "key",
-      id: keyId,
-      question
-    });
   });
 
   // ===================== ANSWER =====================
@@ -188,50 +156,54 @@ io.on("connection", (socket) => {
     const p = players[socket.id];
     if (!p) return;
 
-    // unlock interaction
-    if (activeLocks[socket.id]) {
-      activeLocks[socket.id].delete(id);
+    const list = type === "key" ? p.items.keys : p.items.fragments;
+
+    const item = list.find(i => i.id === id);
+    if (!item || item.collected) return;
+
+    if (correct) {
+      item.collected = true;
+
+      if (type === "key") p.keys++;
+      if (type === "fragment") p.fragments++;
     }
 
-    if (type === "fragment") {
-      if (correct) {
-        fragments = fragments.filter(f => f.id !== id);
-        p.fragments++;
-      }
-    }
-
-    if (type === "key") {
-      if (correct) {
-        keys = keys.filter(k => k.id !== id);
-        p.keys++;
-      }
-    }
-
-    checkUnlock();
+    checkWin(p);
     broadcast(p.roomId);
   });
 
-  // ===================== DISCONNECT =====================
   socket.on("disconnect", () => {
     delete players[socket.id];
-    delete activeLocks[socket.id];
+    io.emit("state", { players, maze, exit });
   });
-
 });
+
+// ===================== WIN CHECK =====================
+function checkWin(p) {
+  const allKeys = p.items.keys.every(k => k.collected);
+  const allFragments = p.items.fragments.every(f => f.collected);
+
+  if (allKeys && allFragments) {
+    exit.unlocked = true;
+  }
+
+  if (p.x === exit.x && p.y === exit.y && exit.unlocked) {
+    io.to(p.roomId).emit("win", { name: p.name });
+  }
+}
 
 // ===================== BROADCAST =====================
 function broadcast(roomId) {
   io.to(roomId).emit("state", {
     players,
     maze,
-    keys,
-    fragments,
     exit
   });
 }
 
 // ===================== START =====================
 const PORT = process.env.PORT || 3000;
+
 server.listen(PORT, () => {
   console.log("Maze running on port", PORT);
 });
