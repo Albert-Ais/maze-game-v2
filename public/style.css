@@ -1,5 +1,36 @@
-body { margin:0; overflow:hidden; background:black; }
+body{
+  margin:0;
+  overflow:hidden;
+  background:black;
+  font-family:Arial;
+}
 
+/* START SCREEN */
+#startScreen{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  background:black;
+  color:white;
+}
+
+#startScreen input{
+  padding:10px;
+  width:200px;
+}
+
+#startScreen button{
+  padding:10px 20px;
+  background:cyan;
+  border:none;
+  cursor:pointer;
+}
+
+/* QUIZ */
 #questionBox{
   position:absolute;
   left:50%;
@@ -29,4 +60,6 @@ body { margin:0; overflow:hidden; background:black; }
   transition:.25s;
 }
 
-#quizOverlay.show{opacity:1;}
+#quizOverlay.show{
+  opacity:1;
+}

@@ -6,45 +6,48 @@ const ctx = canvas.getContext("2d");
 canvas.width = innerWidth;
 canvas.height = innerHeight;
 
-let state = {players:{},maze:[],keys:[],fragments:[],exit:{}};
+let state = { players:{}, maze:[], keys:[], fragments:[], exit:{} };
 const keysPressed = {};
-let camX=0, camY=0;
 
-// ===================== INPUT =====================
+let camX = 0;
+let camY = 0;
+
+// ---------------- INPUT ----------------
 addEventListener("keydown",e=>keysPressed[e.key.toLowerCase()]=true);
 addEventListener("keyup",e=>keysPressed[e.key.toLowerCase()]=false);
 
-// ===================== JOIN =====================
-window.join = ()=>{
-  socket.emit("joinRoom",{
-    name:document.getElementById("name").value,
-    roomId:document.getElementById("room").value
+// ---------------- JOIN ----------------
+window.join = () => {
+  socket.emit("joinRoom", {
+    name: document.getElementById("name").value,
+    roomId: document.getElementById("room").value
   });
 
-  document.getElementById("menu").style.display="none";
+  document.getElementById("startScreen").style.display = "none";
 };
 
-// ===================== SOCKET =====================
-socket.on("state",d=>state=d);
+// ---------------- SOCKET ----------------
+socket.on("state", d => state = d);
 
-// ===================== QUIZ UI =====================
-socket.on("question",d=>{
-  const box=document.getElementById("questionBox");
-  const overlay=document.getElementById("quizOverlay");
-  const q=document.getElementById("q");
-  const opts=document.getElementById("opts");
+// ---------------- QUIZ UI ----------------
+socket.on("question", d => {
+  const box = document.getElementById("questionBox");
+  const overlay = document.getElementById("quizOverlay");
+  const q = document.getElementById("q");
+  const opts = document.getElementById("opts");
 
   box.classList.add("show");
   overlay.classList.add("show");
 
-  q.innerText=d.question.q;
-  opts.innerHTML="";
+  q.innerText = d.question.q;
+  opts.innerHTML = "";
 
   d.question.options.forEach((o,i)=>{
     const b=document.createElement("button");
-    b.innerText=o;
 
+    b.innerText=o;
     b.onclick=()=>{
+
       socket.emit("answer",{
         type:d.type,
         id:d.id,
@@ -59,11 +62,11 @@ socket.on("question",d=>{
   });
 });
 
-// ===================== MOVE =====================
-let last=0;
+// ---------------- MOVE ----------------
+let last = 0;
 
 function update(){
-  const me=state.players[socket.id];
+  const me = state.players[socket.id];
   if(!me) return;
 
   if(performance.now()-last<70) return;
@@ -77,23 +80,24 @@ function update(){
 
   if(x!==me.x||y!==me.y){
     socket.emit("move",{x,y});
-    last=performance.now();
+    last = performance.now();
   }
 }
 
-// ===================== DRAW =====================
+// ---------------- DRAW ----------------
 function draw(){
+
   ctx.fillStyle="#050505";
   ctx.fillRect(0,0,innerWidth,innerHeight);
 
-  const me=state.players[socket.id];
+  const me = state.players[socket.id];
 
   if(me){
-    camX+=(me.x*48-camX-innerWidth/2)*0.12;
-    camY+=(me.y*48-camY-innerHeight/2)*0.12;
+    camX += (me.x*48-camX-innerWidth/2)*0.12;
+    camY += (me.y*48-camY-innerHeight/2)*0.12;
   }
 
-  // maze
+  // MAZE
   for(let y=0;y<state.maze.length;y++){
     for(let x=0;x<state.maze[y].length;x++){
       if(state.maze[y][x]){
@@ -103,7 +107,7 @@ function draw(){
     }
   }
 
-  // items
+  // ITEMS
   for(const k of state.keys){
     ctx.fillStyle="gold";
     ctx.fillRect(k.x*48-camX+18,k.y*48-camY+18,12,12);
@@ -114,10 +118,9 @@ function draw(){
     ctx.fillRect(f.x*48-camX+16,f.y*48-camY+16,16,16);
   }
 
-  // players
+  // PLAYERS
   for(const id in state.players){
     const p=state.players[id];
-
     ctx.fillStyle="lime";
     ctx.fillRect(p.x*48-camX+14,p.y*48-camY+14,20,20);
   }
@@ -125,8 +128,10 @@ function draw(){
   // HUD
   if(me){
     ctx.fillStyle="white";
-    ctx.fillText(`Keys ${me.keys}`,20,20);
-    ctx.fillText(`Fragments ${me.fragments}`,20,40);
+    ctx.font="16px Arial";
+    ctx.fillText(`Keys: ${me.keys}/10`,20,30);
+    ctx.fillText(`Fragments: ${me.fragments}/10`,20,55);
+    ctx.fillText(`Players: ${Object.keys(state.players).length}`,20,80);
   }
 
   update();
