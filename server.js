@@ -28,8 +28,9 @@ let fragments = [];
 let exit = null;
 
 // ===================== AAA SETTINGS =====================
-const PICKUP_RADIUS = 0.7; // smooth pickup feel
+const PICKUP_RADIUS = 0.75;
 const activeQuiz = {};
+const cooldown = {};
 
 // ===================== MAZE =====================
 function generateMaze() {
@@ -57,19 +58,16 @@ function generateMaze() {
   carve(1, 1);
 }
 
-// ===================== SAFE SPAWN =====================
+// ===================== SPAWN =====================
 function emptyTile() {
   let x, y;
-
   do {
     x = Math.floor(Math.random() * W);
     y = Math.floor(Math.random() * H);
   } while (!maze[y] || maze[y][x] === 1);
-
   return { x, y };
 }
 
-// ===================== SPAWN ITEMS =====================
 function spawnItems() {
   keys = [];
   fragments = [];
@@ -91,75 +89,61 @@ function spawnItems() {
   }
 }
 
-// ===================== RESET WORLD =====================
 function resetWorld() {
   generateMaze();
   spawnItems();
 
-  exit = {
-    x: W - 2,
-    y: H - 2,
-    unlocked: false
-  };
+  exit = { x: W - 2, y: H - 2, unlocked: false };
 }
 
 resetWorld();
 
+// ===================== UTIL =====================
+function dist(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+// ===================== PICKUP SYSTEM =====================
+function checkPickup(socket, p) {
+  if (activeQuiz[socket.id]) return;
+  if (cooldown[socket.id] && Date.now() - cooldown[socket.id] < 300) return;
+
+  for (const f of fragments) {
+    if (!f.collected && dist(p, f) <= PICKUP_RADIUS) {
+      activeQuiz[socket.id] = { type: "fragment", id: f.id };
+      socket.emit("question", {
+        type: "fragment",
+        id: f.id,
+        question: getRandomQuestion(f.subject)
+      });
+      cooldown[socket.id] = Date.now();
+      return;
+    }
+  }
+
+  for (const k of keys) {
+    if (!k.collected && dist(p, k) <= PICKUP_RADIUS) {
+      activeQuiz[socket.id] = { type: "key", id: k.id };
+      socket.emit("question", {
+        type: "key",
+        id: k.id,
+        question: getRandomQuestion(k.subject)
+      });
+      cooldown[socket.id] = Date.now();
+      return;
+    }
+  }
+}
+
 // ===================== BROADCAST =====================
-function broadcast(roomId) {
-  io.to(roomId).emit("state", {
+function broadcast(room) {
+  io.to(room).emit("state", {
     players,
     maze,
     keys,
     fragments,
     exit
   });
-}
-
-// ===================== DISTANCE (AAA PICKUP) =====================
-function dist(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-}
-
-// ===================== AAA PICKUP SYSTEM =====================
-function checkPickup(socket, player) {
-  if (activeQuiz[socket.id]) return;
-
-  // FRAGMENTS
-  for (const f of fragments) {
-    if (f.collected) continue;
-
-    if (dist(player, f) <= PICKUP_RADIUS) {
-
-      activeQuiz[socket.id] = { type: "fragment", id: f.id };
-
-      socket.emit("question", {
-        type: "fragment",
-        id: f.id,
-        question: getRandomQuestion(f.subject)
-      });
-
-      return;
-    }
-  }
-
-  // KEYS
-  for (const k of keys) {
-    if (k.collected) continue;
-
-    if (dist(player, k) <= PICKUP_RADIUS) {
-
-      activeQuiz[socket.id] = { type: "key", id: k.id };
-
-      socket.emit("question", {
-        type: "key",
-        id: k.id,
-        question: getRandomQuestion(k.subject)
-      });
-
-      return;
-    }
-  }
 }
 
 // ===================== SOCKET =====================
@@ -199,8 +183,8 @@ io.on("connection", (socket) => {
     const p = players[socket.id];
     if (!p) return;
 
-    const quiz = activeQuiz[socket.id];
-    if (!quiz || quiz.id !== id) return;
+    const q = activeQuiz[socket.id];
+    if (!q || q.id !== id) return;
 
     if (correct) {
       if (type === "fragment") {
@@ -227,10 +211,11 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     delete players[socket.id];
     delete activeQuiz[socket.id];
+    delete cooldown[socket.id];
   });
 });
 
 // ===================== START =====================
-server.listen(process.env.PORT || 3000, () => {
-  console.log("Maze running (AAA pickup enabled)");
-});
+server.listen(process.env.PORT || 3000, () =>
+  console.log("AAA Maze Game Running")
+);

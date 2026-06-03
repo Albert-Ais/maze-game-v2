@@ -7,69 +7,62 @@ canvas.width = innerWidth;
 canvas.height = innerHeight;
 
 let state = { players:{}, maze:[], keys:[], fragments:[], exit:{} };
+
 const keysPressed = {};
+let camX = 0, camY = 0;
 
-let camX = 0;
-let camY = 0;
-
-// ---------------- INPUT ----------------
+// ================= INPUT =================
 addEventListener("keydown",e=>keysPressed[e.key.toLowerCase()]=true);
 addEventListener("keyup",e=>keysPressed[e.key.toLowerCase()]=false);
 
-// ---------------- JOIN ----------------
+// ================= JOIN =================
 window.join = () => {
   socket.emit("joinRoom", {
-    name: document.getElementById("name").value,
-    roomId: document.getElementById("room").value
+    name: name.value,
+    roomId: room.value
   });
 
-  document.getElementById("startScreen").style.display = "none";
+  startScreen.style.display = "none";
 };
 
-// ---------------- SOCKET ----------------
+// ================= SOCKET =================
 socket.on("state", d => state = d);
 
-// ---------------- QUIZ UI ----------------
+// ================= QUIZ =================
 socket.on("question", d => {
-  const box = document.getElementById("questionBox");
-  const overlay = document.getElementById("quizOverlay");
-  const q = document.getElementById("q");
-  const opts = document.getElementById("opts");
-
-  box.classList.add("show");
-  overlay.classList.add("show");
+  questionBox.classList.add("show");
+  quizOverlay.classList.add("show");
 
   q.innerText = d.question.q;
   opts.innerHTML = "";
 
   d.question.options.forEach((o,i)=>{
     const b=document.createElement("button");
-
     b.innerText=o;
-    b.onclick=()=>{
 
+    b.onclick=()=>{
       socket.emit("answer",{
         type:d.type,
         id:d.id,
         correct:i===d.question.answer
       });
 
-      box.classList.remove("show");
-      overlay.classList.remove("show");
+      questionBox.classList.remove("show");
+      quizOverlay.classList.remove("show");
     };
 
     opts.appendChild(b);
   });
 });
 
-// ---------------- MOVE ----------------
-let last = 0;
+// ================= MOVEMENT =================
+let lastMove = 0;
 
 function update(){
   const me = state.players[socket.id];
   if(!me) return;
 
-  if(performance.now()-last<70) return;
+  if(performance.now()-lastMove<60) return;
 
   let x=me.x,y=me.y;
 
@@ -80,11 +73,11 @@ function update(){
 
   if(x!==me.x||y!==me.y){
     socket.emit("move",{x,y});
-    last = performance.now();
+    lastMove = performance.now();
   }
 }
 
-// ---------------- DRAW ----------------
+// ================= DRAW =================
 function draw(){
 
   ctx.fillStyle="#050505";
@@ -131,7 +124,6 @@ function draw(){
     ctx.font="16px Arial";
     ctx.fillText(`Keys: ${me.keys}/10`,20,30);
     ctx.fillText(`Fragments: ${me.fragments}/10`,20,55);
-    ctx.fillText(`Players: ${Object.keys(state.players).length}`,20,80);
   }
 
   update();
