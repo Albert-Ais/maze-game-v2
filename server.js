@@ -67,11 +67,13 @@ function getRandomEmptyCell() {
 // ===================== GAME STATE =====================
 const players = {};
 
+// 🔥 anti-exploit lock system
+const activeLocks = {};
+
 // ===================== KEYS + FRAGMENTS =====================
 let keys = [];
 let fragments = [];
 
-// 1 key + 1 fragment per subject
 for (const subject of SUBJECTS) {
   const k = getRandomEmptyCell();
   const f = getRandomEmptyCell();
@@ -92,17 +94,19 @@ for (const subject of SUBJECTS) {
 }
 
 // ===================== EXIT =====================
-let exit = { x: W - 2, y: W - 2, unlocked: false };
+let exit = { x: W - 2, y: H - 2, unlocked: false };
 
-// ===================== CHECK UNLOCK =====================
+// ===================== CHECK WIN CONDITION =====================
 function checkUnlock() {
-  const allCleared = fragments.length === 0 && keys.length === 0;
-  if (allCleared) exit.unlocked = true;
+  if (keys.length === 0 && fragments.length === 0) {
+    exit.unlocked = true;
+  }
 }
 
 // ===================== SOCKET =====================
 io.on("connection", (socket) => {
 
+  // ===================== JOIN =====================
   socket.on("joinRoom", ({ name, roomId }) => {
     socket.join(roomId);
 
@@ -116,9 +120,12 @@ io.on("connection", (socket) => {
       fragments: 0
     };
 
+    activeLocks[socket.id] = new Set();
+
     broadcast(roomId);
   });
 
+  // ===================== MOVE =====================
   socket.on("move", ({ x, y }) => {
     const p = players[socket.id];
     if (!p) return;
@@ -139,7 +146,13 @@ io.on("connection", (socket) => {
   socket.on("touchFragment", ({ fragmentId }) => {
     const p = players[socket.id];
     const f = fragments.find(x => x.id === fragmentId);
+
     if (!p || !f) return;
+
+    // 🚫 anti spam / farming
+    if (activeLocks[socket.id].has(fragmentId)) return;
+
+    activeLocks[socket.id].add(fragmentId);
 
     const question = getRandomQuestion(f.subject);
 
@@ -154,7 +167,12 @@ io.on("connection", (socket) => {
   socket.on("touchKey", ({ keyId }) => {
     const p = players[socket.id];
     const k = keys.find(x => x.id === keyId);
+
     if (!p || !k) return;
+
+    if (activeLocks[socket.id].has(keyId)) return;
+
+    activeLocks[socket.id].add(keyId);
 
     const question = getRandomQuestion(k.subject);
 
@@ -169,6 +187,11 @@ io.on("connection", (socket) => {
   socket.on("answer", ({ type, id, correct }) => {
     const p = players[socket.id];
     if (!p) return;
+
+    // unlock interaction
+    if (activeLocks[socket.id]) {
+      activeLocks[socket.id].delete(id);
+    }
 
     if (type === "fragment") {
       if (correct) {
@@ -191,6 +214,7 @@ io.on("connection", (socket) => {
   // ===================== DISCONNECT =====================
   socket.on("disconnect", () => {
     delete players[socket.id];
+    delete activeLocks[socket.id];
   });
 
 });
