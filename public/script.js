@@ -92,10 +92,16 @@ socket.on("question", (data) => {
 document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
 document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
 
-// ===================== MOVEMENT =====================
+// ===================== MOVEMENT (FIXED) =====================
+let lastSentX = null;
+let lastSentY = null;
+let moveCooldown = false;
+
 function updateMovement() {
   const me = state.players[socket.id];
   if (!me) return;
+
+  if (moveCooldown) return;
 
   let nx = me.x;
   let ny = me.y;
@@ -105,7 +111,16 @@ function updateMovement() {
   if (keysPressed["a"]) nx--;
   if (keysPressed["d"]) nx++;
 
+  // prevent spam + rubber-banding
+  if (nx === lastSentX && ny === lastSentY) return;
+
   socket.emit("move", { x: nx, y: ny });
+
+  lastSentX = nx;
+  lastSentY = ny;
+
+  moveCooldown = true;
+  setTimeout(() => moveCooldown = false, 70);
 }
 
 // ===================== DRAW PLAYER (SMOOTH) =====================
@@ -130,17 +145,17 @@ function draw() {
 
   const me = state.players[socket.id];
 
-  // ===================== CAMERA =====================
+  // camera follow
   if (me) {
     camX += (me.x * TILE - camX - canvas.width / 2) * 0.15;
     camY += (me.y * TILE - camY - canvas.height / 2) * 0.15;
   }
 
-  // ===================== BACKGROUND =====================
+  // background
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ===================== MAZE =====================
+  // maze
   for (let y = 0; y < (state.maze || []).length; y++) {
     for (let x = 0; x < (state.maze[y] || []).length; x++) {
       if (state.maze[y][x] === 1) {
@@ -155,7 +170,7 @@ function draw() {
     }
   }
 
-  // ===================== KEYS =====================
+  // keys
   for (const k of state.keys || []) {
     ctx.fillStyle = colors[k.subject] || "white";
     ctx.fillRect(
@@ -166,7 +181,7 @@ function draw() {
     );
   }
 
-  // ===================== FRAGMENTS =====================
+  // fragments
   for (const f of state.fragments || []) {
     ctx.fillStyle = colors[f.subject] || "yellow";
     ctx.fillRect(
@@ -177,7 +192,7 @@ function draw() {
     );
   }
 
-  // ===================== EXIT =====================
+  // exit
   if (state.exit) {
     ctx.fillStyle = state.exit.unlocked ? "lime" : "red";
     ctx.fillRect(
@@ -188,7 +203,7 @@ function draw() {
     );
   }
 
-  // ===================== PLAYERS =====================
+  // players
   for (const id in state.players) {
     const p = state.players[id];
 
@@ -196,7 +211,7 @@ function draw() {
     drawPlayer(p);
   }
 
-  // ===================== HUD =====================
+  // HUD
   if (me) {
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
@@ -208,8 +223,5 @@ function draw() {
 }
 
 // ===================== START =====================
-document.addEventListener("keydown", (e) => keysPressed[e.key] = true);
-document.addEventListener("keyup", (e) => keysPressed[e.key] = false);
-
 setInterval(updateMovement, 80);
 draw();
